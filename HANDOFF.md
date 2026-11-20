@@ -3,8 +3,11 @@
 Keep under 300 words. Overwrite each session.
 
 - **Date / device / assistant:**
-- **Branch:**
+- **Branch / commit:**
+- **Working tree:** clean / dirty (list files)
 - **Done this session:**
-- **Tests / checks and results:**
-- **Known problems:**
+- **Checks and exact results:**
+- **Repro / verify command:**
+- **Known problems / decisions needed:**
 - **Next step:**
+- **Do not delete / assumptions:**
