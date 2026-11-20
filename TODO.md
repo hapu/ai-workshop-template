@@ -1,5 +1,7 @@
 # TODO
 
+Keep small; one active task. Each item should be verifiable.
+
 ## Now
 - [ ]
 
@@ -7,4 +9,7 @@
 - [ ]
 
 ## Later
+- [ ]
+
+## Blocked / needs decision
 - [ ]

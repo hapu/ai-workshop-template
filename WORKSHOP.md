@@ -48,12 +48,14 @@ ai-workshop-template/
 ├── DEVELOPMENT_LOG.md    changes and experiments
 ├── DECISIONS.md          decisions and rationale
 ├── docs/
+│   ├── NEW_PROJECT.md    setup checklist for a copied template
 │   ├── PROVIDERS.md      providers, quotas, last-verified dates
 │   ├── WORKFLOW.md       multi-device and multi-agent process
 │   ├── SECURITY.md       credentials and safety rules
 │   ├── ARCHITECTURE.md   components of the current project
-│   └── ROADMAP.md        workshop build-out phases
+│   └── ROADMAP.md        project phases and checkpoints
 ├── scripts/              helper scripts (check-words.sh)
+├── tests/                repo health checks (smoke.sh)
 ├── config/examples/      sample config, never real secrets
 └── .gitignore
 ```
@@ -69,13 +71,17 @@ Free-tier APIs have tight input limits, so context files stay small. Use bullets
 | AGENTS.md | 500 |
 | PROJECT_CONTEXT.md | 800 |
 | HANDOFF.md | 300 |
+| TODO.md | 500 |
+| docs/ARCHITECTURE.md | 600 |
+| docs/WORKFLOW.md | 800 |
+| docs/NEW_PROJECT.md | 700 |
 | DEVELOPMENT_LOG.md | Archive entries older than the last ~20 once it passes 3,000 |
 
 ## 7. Workflow (details in `docs/WORKFLOW.md`)
 
-- **Start:** pull, read `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, check branch and working tree, pick one task.
-- **During:** one small change at a time, run checks, update docs when behavior or decisions change.
-- **End:** summarize, record test results, update `HANDOFF.md`, commit, push.
+- **Start:** inspect branch and working tree, read `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, and `docs/WORKFLOW.md`, `git pull --rebase` only if clean, pick one task.
+- **During:** one small change at a time, run `bash scripts/check-words.sh && bash tests/smoke.sh` (and project checks as added), update docs when behavior or decisions change.
+- **End:** summarize, record check results, update `HANDOFF.md` (and `DEVELOPMENT_LOG.md` for notable changes/experiments), review `git diff`, commit and push only when explicitly asked.
 
 ## 8. Security (details in `docs/SECURITY.md`)
 
@@ -87,11 +93,7 @@ Free-tier APIs have tight input limits, so context files stay small. Use bullets
 
 ## 9. Starting a new idea
 
-1. Click **Use this template** on GitHub and name the new repo.
-2. Fill in `PROJECT_CONTEXT.md` (goal, constraints, definition of done).
-3. Add first tasks to `TODO.md`; delete docs you don't need.
-4. Prompt your assistant: *"Read AGENTS.md, PROJECT_CONTEXT.md and HANDOFF.md, then start on the first item in TODO.md."*
-5. Commit.
+Follow `docs/NEW_PROJECT.md`. In short: create the repo from the template, fill the context files, choose a stack, add a run command and tests, then start the first TODO item.
 
 ## 10. Roadmap (details in `docs/ROADMAP.md`)
 
@@ -101,6 +103,6 @@ Free-tier APIs have tight input limits, so context files stay small. Use bullets
 4. **Context:** test handoffs between different assistants.
 5. **Automation:** routing and monitoring only if measurably useful.
 
-## 11. Current mission
+## 11. Template maintenance
 
-Stabilize the workshop first. No single game or app is the organizing principle; projects come later through the template.
+This file is the workshop spec. Keep it generic. Project-specific goals, state, and tasks belong in `PROJECT_CONTEXT.md`, `HANDOFF.md`, and `TODO.md`; do not turn the template into a project.
