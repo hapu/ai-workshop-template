@@ -34,7 +34,8 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [ ] Verify current provider/model terms and account-level quotas before adding approved entries.
 - [x] Add a minimal OpenRouter Chat Completions adapter that uses the shared runner.
 - [ ] Reconcile usage from other devices and browser/API tools before enabling adapters.
-- [x] Surface sanitized OpenRouter limit-source, reset, and retry-after diagnostics without automatic retries.\n- [ ] Add provider-specific quota coverage and measured fail-closed fallback without paid-model substitution.
+- [x] Surface sanitized OpenRouter limit-source, reset, and retry-after diagnostics without automatic retries.
+- [ ] Add provider-specific quota coverage and measured fail-closed fallback without paid-model substitution.
 
 ## Phase 4: Browser assistant interoperability
 - [ ] Import assistant responses and proposed file changes safely.
