@@ -41,11 +41,13 @@ Task data lives under `.workshop/` and is ignored by Git. The context builder re
 
 ## 4. Provider contracts and zero-cost policy
 
-`workshop/providers/base.py` defines the adapter contract. `workshop/providers/policy.py` loads an explicit local model catalog and performs a fail-closed preflight. No actual inference adapters are included and the default catalog is empty.
+`workshop/providers/base.py` defines the adapter contract. `workshop/providers/policy.py` validates the model policy and `workshop/providers/usage_ledger.py` atomically reserves request/token quotas in a local SQLite ledger. `workshop/providers/runner.py` is the supported adapter entry point: it authorizes, reserves quota, and only then calls the provider. No actual inference adapters are included and the default catalog is empty.
 
-Before adding a model policy, verify official pricing, whether access is genuinely free rather than trial/credits, eligible regions and account types, current model limits, and terms. Include verification and expiry dates and official HTTPS source links. The policy gate checks the HTTPS scheme, but a person must verify that the links are official and the policy fields reflect the provider's current terms. The gate rejects any unknown, unverified, expired, non-zero-priced, disabled, region-ineligible, or over-limit model.
+Before adding a model policy, verify official pricing, whether access is genuinely free rather than trial/credits, eligible regions and account types, current model/project limits, and terms. Include verification and expiry dates, official HTTPS source links, and quota windows. The policy gate rejects any unknown, unverified, expired, non-zero-priced, disabled, region-ineligible, or over-limit model.
 
-Do not bypass the gate in a future provider adapter. A preflight approval does not guarantee provider-side availability and does not replace account spending limits or free-quota usage accounting. Add those controls before enabling live adapters.
+The usage ledger reserves requests, input/output tokens, and Neurons atomically before a model call. A Neuron-metered request is denied unless the policy explicitly contains a Neuron quota. The caller must provide a conservative input-token estimate covering system instructions, all messages, and included context; the package has no generic tokenizer. The maximum output count is reserved. Reservations are not refunded after uncertain transport failures. All local use of the same provider quota boundary must share the same non-secret `account_scope` alias and local ledger. Usage outside this device/ledger is not visible to it; check provider dashboards and reconcile external usage before enabling live adapters.
+
+Do not bypass `execute_with_free_tier_gate` in a future provider adapter. A CLI preflight is read-only and does not reserve a request. Neither it nor the local ledger guarantees provider-side availability or enforces external billing settings.
 
 ## 5. Coding agent and browser workflow
 
@@ -68,17 +70,17 @@ The default aggregate context budget is 2,500 words. Raise it explicitly only af
 
 - **Start:** inspect branch and working tree; read project context; resume an existing task or create one.
 - **During:** update task checkpoints and notes; make one reviewable change at a time; run unit tests and repository checks.
-- **Before inference:** run the provider preflight with the correct region and estimates. If it denies, do not try another model unless that model has its own verified policy.
+- **Before inference:** ensure the model has a verified policy and use the provider runner, which atomically reserves local quota before network I/O. A CLI preflight is read-only. If any check denies, do not try another model unless it has its own verified policy.
 - **End:** export a task handoff, review `git diff`, and record exact test results. Commit and push only when explicitly requested.
 
 ## 8. Security and spending
 
 - Never commit API keys, tokens, passwords, or `.env` files.
-- Treat `.workshop/` task descriptions, context bundles, and handoffs as private project data.
+- Treat `.workshop/` task descriptions, context bundles, usage ledger, and handoffs as private project data.
 - Keep `config/provider-catalog.json` local; only the empty example is tracked.
 - No paid usage without explicit approval. Unknown prices or eligibility must fail closed.
 - Follow provider terms; do not evade quotas with extra accounts.
 
 ## 9. Roadmap and template maintenance
 
-See `docs/ROADMAP.md` for implementation phases and `docs/PROVIDERS.md` for the verification protocol. Keep this master repository generic. Project-specific goals, context, and tasks belong in each repository created from the template.
+See `docs/ROADMAP.md` for implementation phases and `docs/PROVIDERS.md` for current provider research and the verification protocol. Keep this master repository generic. Project-specific goals, context, and tasks belong in each repository created from the template.

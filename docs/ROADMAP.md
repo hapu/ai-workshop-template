@@ -18,10 +18,16 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [x] Define a provider-neutral request/response protocol.
 - [x] Add an explicit local model-policy catalog with an empty-by-default allowlist.
 - [x] Implement a fail-closed preflight for free-tier, zero-price, dates, HTTPS sources, region, and token limits.
-- [x] Add CLI commands to list policies and preflight a request without network access.
+- [x] Add CLI commands to list policies, preflight quota, and show local usage without network access.
+- [x] Add SQLite quota ledger with atomic concurrent reservations and account/model scopes.
+- [x] Require Neuron quota definitions for nonzero Neuron-metered requests.
+- [x] Add a shared provider runner that reserves usage before invoking an adapter.
+- [x] Research current provider free-tier status and document official sources.
 - [ ] Verify current provider/model terms and add only individually verified entries.
-- [ ] Add provider adapters that call the gate before every request.
-- [ ] Add rate-limit handling, measured fallback, and usage accounting.
+- [ ] Add provider adapters that call the shared runner before every request.
+- [ ] Reconcile external provider usage and live account quotas before enabling adapters.
+- [ ] Add shared usage-state support or import/reconciliation for other devices and browser/API tools.
+- [ ] Add rate-limit handling and measured fallback without paid-model substitution.
 
 ## Phase 4: Browser assistant interoperability
 - [ ] Import assistant responses and proposed file changes safely.

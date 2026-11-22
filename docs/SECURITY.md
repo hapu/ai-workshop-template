@@ -10,9 +10,13 @@
 
 ## Provider and spending controls
 - The provider preflight denies unknown, disabled, trial-only, unverified, expired, region-ineligible, non-zero-priced, or over-limit models.
-- HTTPS source validation does not establish source authenticity; a maintainer must verify every linked source and the policy contents.
-- The current gate does not account for remaining free quotas, concurrent usage, or provider-side spending. It must not be treated as a complete no-charge guarantee.
-- Before any adapter is enabled, add conservative usage reservations/accounting, enforce the gate before each call, and configure provider-side billing/spending restrictions.
-- No adapter may silently fall back to an unknown or paid model.
+- The local quota ledger reserves requests/token units atomically before inference; future adapters must use `execute_with_free_tier_gate`, not raw provider methods.
+- Use the same non-secret `account_scope` alias for every credential and local task using the same provider account. A new alias can reset local accounting, so do not create additional aliases for one account to evade a limit.
+- The local ledger cannot see usage from other devices/apps. Check the actual provider dashboard before every adapter is enabled and block calls when external usage is unknown.
+- Preflight is not a reservation and must never be treated as approval to send.
+- A reservation is not refunded after timeouts or ambiguous failures; the provider may have received the request.
+- Pricing and eligibility must be backed by current official HTTPS sources and an expiry date.
+- A future provider adapter must call the gate before every request. No adapter may silently fall back to an unknown or paid model.
+- The local policy gate is not an account spending cap and does not guarantee provider-side availability. Configure provider-side limits when available.
 - Follow provider terms and rate limits. Do not create extra accounts or keys to evade quotas.
 - No paid usage without explicit approval.

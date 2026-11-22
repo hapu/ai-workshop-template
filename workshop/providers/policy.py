@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+QUOTA_METRICS = frozenset({"requests", "input_tokens", "output_tokens", "neurons"})
+QUOTA_SCOPES = frozenset({"account", "model"})
+MAX_QUOTA_WINDOW_SECONDS = 365 * 24 * 60 * 60
+
 
 class ProviderCatalogError(Exception):
     """Raised when a provider catalog is malformed or unsafe to interpret."""
@@ -17,6 +21,42 @@ class ProviderCatalogError(Exception):
 
 class PolicyDenied(Exception):
     """Raised when a model request cannot be proven eligible for zero-cost use."""
+
+
+@dataclass(frozen=True, slots=True)
+class QuotaLimit:
+    metric: str
+    window_seconds: int
+    limit: int
+    scope: str
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "QuotaLimit":
+        required = {"metric", "window_seconds", "limit", "scope"}
+        missing = required.difference(raw)
+        if missing:
+            raise ProviderCatalogError(
+                "Quota entry is missing fields: " + ", ".join(sorted(missing))
+            )
+        metric = raw["metric"]
+        scope = raw["scope"]
+        if not isinstance(metric, str) or metric not in QUOTA_METRICS:
+            raise ProviderCatalogError(
+                "Quota metric must be one of: " + ", ".join(sorted(QUOTA_METRICS))
+            )
+        if not isinstance(scope, str) or scope not in QUOTA_SCOPES:
+            raise ProviderCatalogError(
+                "Quota scope must be one of: " + ", ".join(sorted(QUOTA_SCOPES))
+            )
+        window = raw["window_seconds"]
+        limit = raw["limit"]
+        if isinstance(window, bool) or not isinstance(window, int) or not 1 <= window <= MAX_QUOTA_WINDOW_SECONDS:
+            raise ProviderCatalogError(
+                f"Quota window_seconds must be an integer from 1 to {MAX_QUOTA_WINDOW_SECONDS}"
+            )
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+            raise ProviderCatalogError("Quota limit must be a positive integer")
+        return cls(metric, window, limit, scope)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +75,7 @@ class ModelPolicy:
     output_cost_usd_per_million_tokens: Decimal
     max_input_tokens: int
     max_output_tokens: int
+    quotas: tuple[QuotaLimit, ...]
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ModelPolicy":
@@ -42,25 +83,47 @@ class ModelPolicy:
             "provider", "model", "enabled", "access_type", "verification_status",
             "verified_at", "expires_at", "source_url", "terms_url", "regions",
             "input_cost_usd_per_million_tokens", "output_cost_usd_per_million_tokens",
-            "max_input_tokens", "max_output_tokens",
+            "max_input_tokens", "max_output_tokens", "quotas",
         }
         missing = required.difference(raw)
         if missing:
             raise ProviderCatalogError(
                 "Model policy is missing fields: " + ", ".join(sorted(missing))
             )
-        for field_name in ("provider", "model", "access_type", "verification_status", "source_url", "terms_url"):
+        for field_name in (
+            "provider", "model", "access_type", "verification_status", "source_url", "terms_url"
+        ):
             if not isinstance(raw[field_name], str) or not raw[field_name].strip():
-                raise ProviderCatalogError(f"Model policy field '{field_name}' must be a non-empty string")
+                raise ProviderCatalogError(
+                    f"Model policy field '{field_name}' must be a non-empty string"
+                )
         if not isinstance(raw["enabled"], bool):
             raise ProviderCatalogError("Model policy field 'enabled' must be boolean")
         regions = raw["regions"]
-        if not isinstance(regions, list) or not regions or not all(isinstance(item, str) and item.strip() for item in regions):
+        if not isinstance(regions, list) or not regions or not all(
+            isinstance(item, str) and item.strip() for item in regions
+        ):
             raise ProviderCatalogError("Model policy 'regions' must be a non-empty list of region codes")
         for field_name in ("max_input_tokens", "max_output_tokens"):
             value = raw[field_name]
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-                raise ProviderCatalogError(f"Model policy field '{field_name}' must be a positive integer")
+                raise ProviderCatalogError(
+                    f"Model policy field '{field_name}' must be a positive integer"
+                )
+        raw_quotas = raw["quotas"]
+        if not isinstance(raw_quotas, list) or not raw_quotas:
+            raise ProviderCatalogError("Model policy 'quotas' must be a non-empty list")
+        if not all(isinstance(item, dict) for item in raw_quotas):
+            raise ProviderCatalogError("Every quota entry must be an object")
+        quotas = tuple(QuotaLimit.from_dict(item) for item in raw_quotas)
+        seen_quotas: set[tuple[str, int, str]] = set()
+        for quota in quotas:
+            key = (quota.metric, quota.window_seconds, quota.scope)
+            if key in seen_quotas:
+                raise ProviderCatalogError(f"Duplicate quota definition: {key}")
+            seen_quotas.add(key)
+        if not any(quota.metric == "requests" for quota in quotas):
+            raise ProviderCatalogError("At least one requests quota is required for safe preflight")
         try:
             verified = date.fromisoformat(raw["verified_at"])
             expires = date.fromisoformat(raw["expires_at"])
@@ -68,6 +131,8 @@ class ModelPolicy:
             output_cost = Decimal(str(raw["output_cost_usd_per_million_tokens"]))
         except (TypeError, ValueError, InvalidOperation) as exc:
             raise ProviderCatalogError(f"Invalid date or cost in model policy: {exc}") from exc
+        if not input_cost.is_finite() or not output_cost.is_finite():
+            raise ProviderCatalogError("Model costs must be finite decimal values")
         if input_cost < 0 or output_cost < 0:
             raise ProviderCatalogError("Model costs cannot be negative")
         if expires < verified:
@@ -87,6 +152,7 @@ class ModelPolicy:
             output_cost_usd_per_million_tokens=output_cost,
             max_input_tokens=raw["max_input_tokens"],
             max_output_tokens=raw["max_output_tokens"],
+            quotas=quotas,
         )
 
 

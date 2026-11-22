@@ -11,6 +11,7 @@ from .context_manager import ContextError, ContextManager
 from .handoff import render_handoff
 from .models import TASK_STATUSES, Task
 from .providers.policy import FreeTierGate, PolicyDenied, ProviderCatalogError, ProviderRegistry
+from .providers.usage_ledger import QuotaExceeded, UsageLedger, UsageLedgerError
 from .task_store import TaskStore, TaskStoreError
 
 
@@ -72,7 +73,17 @@ def _parser() -> argparse.ArgumentParser:
     preflight.add_argument("--input-tokens", type=int, required=True)
     preflight.add_argument("--output-tokens", type=int, required=True)
     preflight.add_argument("--region", required=True)
+    preflight.add_argument("--neurons", type=int, default=0, help="conservative estimate for Neuron-metered services")
+    preflight.add_argument("--account-scope", default="default", help="local alias shared by all keys for one provider account")
     preflight.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
+    preflight.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
+
+    usage = provider_commands.add_parser("usage", help="show local reserved quota usage")
+    usage.add_argument("provider")
+    usage.add_argument("model")
+    usage.add_argument("--account-scope", default="default")
+    usage.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
+    usage.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
 
     commands.add_parser("doctor", help="check the local Python and workspace environment")
     return parser
@@ -191,6 +202,24 @@ def _run_provider(args: argparse.Namespace) -> int:
             state = "enabled" if policy.enabled else "disabled"
             print(f"{policy.provider}/{policy.model}: {policy.access_type}, {policy.verification_status}, {state}")
         return 0
+
+    try:
+        policy = registry.require(args.provider, args.model)
+    except PolicyDenied as exc:
+        print(f"DENIED: {exc}", file=sys.stderr)
+        return 2
+    ledger = UsageLedger(args.ledger)
+    if args.provider_command == "usage":
+        statuses = ledger.usage(policy, account_scope=args.account_scope)
+        print(f"Local usage for {policy.provider}/{policy.model} (account scope: {args.account_scope})")
+        for item in statuses:
+            print(
+                f"{item.metric} / {item.window_seconds}s / {item.scope}: "
+                f"{item.used}/{item.limit} used; {item.remaining} remaining"
+            )
+        print("Only requests reserved by this workshop ledger are counted.")
+        return 0
+
     try:
         approval = FreeTierGate(registry).authorize(
             provider=args.provider,
@@ -199,13 +228,27 @@ def _run_provider(args: argparse.Namespace) -> int:
             output_tokens=args.output_tokens,
             region=args.region,
         )
-    except PolicyDenied as exc:
+        statuses = ledger.preflight(
+            policy,
+            account_scope=args.account_scope,
+            input_tokens=approval.input_tokens,
+            output_tokens=approval.output_tokens,
+            neurons=args.neurons,
+        )
+    except (PolicyDenied, QuotaExceeded) as exc:
         print(f"DENIED: {exc}", file=sys.stderr)
         return 2
     print(f"APPROVED: {approval.provider}/{approval.model}")
     print(f"Region: {approval.region}")
     print(f"Estimated input/output tokens: {approval.input_tokens}/{approval.output_tokens}")
     print("Verified model costs: $0.00; no network request was made.")
+    for item in statuses:
+        print(
+            f"Quota {item.metric}/{item.window_seconds}s: "
+            f"{item.used}+{item.requested}/{item.limit}; "
+            f"{item.remaining_after_request} remaining after this request"
+        )
+    print("Preflight does not reserve usage. A provider adapter must call UsageLedger.reserve immediately before network I/O.")
     return 0
 
 
@@ -240,7 +283,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "provider":
             return _run_provider(args)
         return _run_task(args, TaskStore(args.home))
-    except (TaskStoreError, ContextError, ProviderCatalogError) as exc:
+    except (TaskStoreError, ContextError, ProviderCatalogError, UsageLedgerError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     except OSError as exc:

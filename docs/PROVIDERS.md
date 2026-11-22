@@ -1,45 +1,78 @@
 # Providers
 
-Limits, model names, pricing, terms, and eligibility change. Verify each row from an official source and update the date. Leave a cell as `unverified` until checked. Never copy a row from another project without re-checking it.
+Limits, model names, pricing, terms, and eligibility change. Verify each row from official sources and update the date. Leave a cell as `unverified` until checked. Never copy a row from another project without re-checking it.
 
 ## Verification protocol
+
 - Use the provider's official pricing, rate-limit, model, regional-availability, or terms page.
 - Separate permanent free access from trials, promotional credits, and conditional grants.
-- Record model identifier, input/output prices, per-request token limits, request quotas, eligible regions/account types, and expiry rules.
+- Record exact model ID, input/output prices, per-request token limits, request/token quotas, eligible regions and account types, expiry rules, and data-use terms.
 - Record the exact verification date, recheck/expiry date, and official HTTPS pricing and terms links.
 - Record uncertainty rather than guessing. If any required field cannot be verified, do not enable the model.
 - Re-verify every 90 days or before relying on a limit.
 - Keep historical corrections in the verification log; do not silently overwrite a removed limit.
 
+## Current provider assessment
+
+Initial research checked official provider documentation on **2026-11-21**. This is a research snapshot, not an account-level approval. No provider is enabled in the local model catalog.
+
+| Provider | Current free-access finding | Implication for this workshop | Status |
+| :--- | :--- | :--- | :--- |
+| OpenRouter | The free-model collection lists model variants with $0 prompt/completion pricing. Free-model rate limits depend on the account's purchased-credit tier; the official key endpoint exposes `free_model_daily_requests` (used/limit/remaining), while the per-minute free-model limit is not returned by that endpoint. OpenRouter's documentation also notes model-specific provider capacity and global rate enforcement. | Strong first adapter candidate if an exact `:free` model ID is pinned, all paid fallback and paid variants are disabled, current account limits are obtained from the official key endpoint, and account/project usage is reconciled. Never buy credits to increase a quota; credit purchases violate the zero-spend requirement. | Candidate; account limits not verified |
+| Google AI Studio / Gemini API | Selected models have free input and output token prices. Mexico is listed as a supported region. Rate limits are per project, vary by model and project tier, and must be checked in the user's AI Studio rate-limit dashboard. Daily request quotas reset at midnight Pacific time. Free-tier content may be used to improve Google's products. Some tools/grounding features have separate charges or restrictions. | Strong candidate once the user verifies the exact model and project quotas, confirms the project remains on the Free tier without billing enabled, accepts the free-tier data-use terms, and disables paid tools/grounding. Do not hard-code a generic Gemini quota from another account. | Candidate; account limits not verified |
+| Groq | Limits are measured in RPM, RPD, TPM, TPD, and sometimes separate input/output token dimensions. Exact limits are organization-specific and shown in the account's Limits page. | Do not assume public example limits equal this account's Free Plan limits. Add only after the user's organization dashboard and eligibility are verified. | Unverified |
+| Cloudflare Workers AI | Workers Free includes 10,000 Neurons/day; limits reset at 00:00 UTC and excess operations fail on Workers Free. Workers Paid bills usage above the allocation at $0.011 per 1,000 Neurons. Some models require paid billing or prepaid AI Gateway credits. | Potential free-allocation option only after confirming the account is on Workers Free and selecting a model that does not require paid billing. The current model policy requires exactly $0/token input and output, so it cannot yet express a metered model drawing from a free Neuron allowance; add a separate allocation policy before considering an adapter. | Not supported by current policy schema |
+| Hugging Face Inference Providers | Current documentation states Free users receive no included monthly Inference Provider credits; Free users must purchase credits or upgrade to PRO. | Not eligible for the strict free-only API list. Do not confuse older documentation or historical credits with current Free access. | Not eligible under current free-only rule |
+| Mistral API | Mistral Free mode includes usage for Vibe and Studio but does not include API access. Creating API keys and using the API require billing activation and pay-as-you-go. | Not eligible for a no-billing API integration. | Not eligible under current free-only rule |
+| Cerebras | Developer access includes a one-time $5 promotional credit after adding a valid payment method. It expires 30 days after activation; access pauses after expiration/exhaustion unless PayGo credits are purchased. It is not an ongoing free tier. | Exclude from strict zero-budget routing. A temporary promotional balance is not a permanent free quota. | Trial/promo only; excluded |
+| NVIDIA NIM | The NVIDIA Developer Program describes free hosted NIM API endpoints for prototyping, research, development, and testing. Production use requires an NVIDIA AI Enterprise license. Public documentation reviewed here did not establish dependable per-model request/token quotas or account/region availability. | Possible evaluation candidate, but don't enable until model-specific quotas, endpoint terms, region eligibility, and intended-use restrictions are verified. Do not assume free prototype access permits production workloads. | Candidate; capacity and exact terms unverified |
+
+### Official sources checked
+
+- OpenRouter free models and rate-limit documentation: <https://openrouter.ai/collections/free-models> and <https://openrouter.ai/docs/api_reference/limits> (the `GET /api/v1/key` endpoint reports current free-model daily requests used/limit/remaining)
+- Gemini pricing, rate limits, and supported regions: <https://ai.google.dev/gemini-api/docs/pricing>, <https://ai.google.dev/gemini-api/docs/rate-limits>, and <https://ai.google.dev/gemini-api/docs/available-regions>
+- Groq rate limits: <https://console.groq.com/docs/rate-limits>
+- Cloudflare Workers AI pricing: <https://developers.cloudflare.com/workers-ai/platform/pricing/>
+- Hugging Face Inference Providers pricing: <https://huggingface.co/docs/inference-providers/main/pricing>
+- Mistral usage and limits: <https://docs.mistral.ai/admin/billing-usage/usage-limits>
+- Cerebras pricing and Developer credit terms: <https://www.cerebras.ai/pricing>
+- NVIDIA NIM Developer Program and API Catalog: <https://docs.api.nvidia.com/nim/docs/product> and <https://docs.api.nvidia.com/nim/docs/api-quickstart>
+
 ## Local policy catalog
 
-`workshop/providers/policy.py` implements a fail-closed preflight. The tracked `config/provider-catalog.example.json` is intentionally empty. Copy it to the gitignored `config/provider-catalog.json` only after completing official-source verification. The gate requires:
+`workshop/providers/policy.py` implements a fail-closed preflight. The tracked `config/provider-catalog.example.json` is intentionally empty. Copy it to the gitignored `config/provider-catalog.json` only after completing official-source verification. Each model entry requires:
 
 - `enabled: true`, `access_type: free_tier`, and `verification_status: verified`
 - valid `verified_at` and future `expires_at` dates
-- HTTPS `source_url` and `terms_url` fields, which a maintainer must verify as official sources
-- exact zero input and output price
-- explicit allowed region codes and maximum input/output token limits
+- official HTTPS `source_url` and `terms_url` values (a human must verify source authenticity)
+- exact zero input and output token prices
+- explicit allowed region codes and maximum input/output tokens per request
+- one or more quota windows, each with a metric, positive limit, window in seconds, and `account` or `model` scope
 
-Unknown models, malformed policies, expired entries, non-zero prices, and requests outside the listed region or token limits are denied. The preflight is local-only and does not contact a provider. HTTPS validation is not proof that a URL is an official provider source. No provider-specific adapters or approved model entries are included in this template yet.
+Unknown models, malformed policies, expired entries, non-zero prices, and requests outside listed region, token, or quota limits are denied. The empty example has no model entries, so all model requests are denied by default.
 
-The current preflight does not track live account quota consumption, concurrent requests, or provider-side charges. It is not by itself sufficient to enable an API adapter. Add conservative usage reservations/accounting and configure provider-side spending limits where available before sending requests.
+The local policy gate does not make network calls. It also cannot prove that a cited source URL is official, that an account remains on a free tier, or that the account's external quota has not been consumed through another app or device. Those facts require user verification and provider-dashboard reconciliation.
 
-## Providers to evaluate
+## Local quota ledger
 
-| Provider | Access type | Models / limits | Last verified | Official source |
-| :--- | :--- | :--- | :--- | :--- |
-| Google AI Studio / Gemini | unverified | unverified | | https://ai.google.dev/gemini-api/docs/pricing |
-| Groq | unverified | unverified | | https://console.groq.com/docs/rate-limits |
-| Cerebras | unverified | unverified | | https://inference-docs.cerebras.ai/ |
-| Mistral | unverified | unverified | | https://docs.mistral.ai/ |
-| NVIDIA NIM | unverified | unverified | | https://build.nvidia.com/ |
-| Cloudflare Workers AI | unverified | unverified | | https://developers.cloudflare.com/workers-ai/ |
-| Hugging Face | unverified | unverified | | https://huggingface.co/docs |
-| OpenRouter | unverified | unverified | | https://openrouter.ai/collections/free-models |
+`workshop/providers/usage_ledger.py` maintains request reservations in `.workshop/provider-usage.sqlite3`:
+
+- SQLite transactions use `BEGIN IMMEDIATE` so concurrent local tasks cannot both reserve the last request slot.
+- Configured windows are checked before the reservation is inserted. Supported metrics are requests, input tokens, output tokens, and Neurons.
+- Account-scoped quotas aggregate that provider account across models; model-scoped quotas apply only to one model.
+- Windows are conservative rolling windows. A rolling 24-hour window may be stricter than a provider's fixed daily reset, but avoids relying on unknown reset time zones.
+- Reservations are made before network I/O and are not refunded after a timeout or ambiguous failure, because the provider may have processed the request.
+- Only usage routed through this local ledger is counted. Usage from external tools, other devices, or other applications must be checked separately in the provider dashboard.
+- Input token counts are caller-supplied conservative estimates (including system instructions and context); the CLI does not tokenize prompts. Maximum output tokens are reserved in advance.
+- Any nonzero Neuron request is denied unless the policy defines a Neuron quota window.
+- The ledger stores metadata and estimated token/unit counts, never prompts or API keys. `account_scope` is a local label shared by all credentials belonging to the same provider quota boundary (for example, an organization or project); it is not a credential.
+
+`provider preflight` is read-only: it checks whether one additional request currently fits but does not reserve it. A future adapter must use `execute_with_free_tier_gate` from `workshop/providers/runner.py`, which verifies the model policy, atomically reserves quota, and only then calls the adapter. Do not call an adapter's raw `complete` method directly. No live adapters are included yet.
+
+The ledger is local to this machine and database file. It does not coordinate other devices or update provider-side quotas. Until provider API quota queries or a single shared usage authority are implemented, keep all usage for a provider account routed through this ledger and verify actual account limits before enabling an adapter.
 
 ## Verification log
 
 | Date | Provider / model | What changed / official source |
 | :--- | :--- | :--- |
-| | | |
+| 2026-11-21 | Initial provider review | Added official-source assessment and exclusions/candidates above. No models approved for the local catalog. |
