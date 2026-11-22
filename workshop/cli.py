@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+import uuid
 from pathlib import Path
 
 from . import __version__
@@ -11,6 +13,7 @@ from .context_manager import ContextError, ContextManager
 from .handoff import render_handoff
 from .models import TASK_STATUSES, Task
 from .providers.policy import FreeTierGate, PolicyDenied, ProviderCatalogError, ProviderRegistry
+from .providers.reconciliation import openrouter_key_response_to_snapshot
 from .providers.usage_ledger import QuotaExceeded, UsageLedger, UsageLedgerError
 from .task_store import TaskStore, TaskStoreError
 
@@ -84,6 +87,23 @@ def _parser() -> argparse.ArgumentParser:
     usage.add_argument("--account-scope", default="default")
     usage.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
     usage.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
+
+    reconcile = provider_commands.add_parser("reconcile", help="import a provider dashboard/API quota snapshot")
+    reconcile.add_argument("snapshot_file", type=Path)
+    reconcile.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
+    reconcile.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
+
+    openrouter = provider_commands.add_parser(
+        "reconcile-openrouter-key",
+        help="convert a saved OpenRouter GET /api/v1/key response into a quota snapshot",
+    )
+    openrouter.add_argument("response_file", type=Path)
+    openrouter.add_argument("--model", required=True)
+    openrouter.add_argument("--account-scope", required=True)
+    openrouter.add_argument("--captured-at", required=True, help="UTC ISO-8601 time when the response was captured")
+    openrouter.add_argument("--snapshot-id", default=None)
+    openrouter.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
+    openrouter.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
 
     commands.add_parser("doctor", help="check the local Python and workspace environment")
     return parser
@@ -192,6 +212,43 @@ def _run_context(args: argparse.Namespace) -> int:
 
 def _run_provider(args: argparse.Namespace) -> int:
     registry = ProviderRegistry.load(args.catalog)
+    if args.provider_command == "reconcile":
+        try:
+            raw = json.loads(args.snapshot_file.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict) or not isinstance(raw.get("provider"), str) or not isinstance(raw.get("model"), str):
+                raise ValueError("Snapshot file must contain string provider and model fields")
+            policy = registry.require(raw["provider"], raw["model"])
+            snapshot = UsageLedger(args.ledger).import_snapshot(raw, policy)
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError, UsageLedgerError, PolicyDenied) as exc:
+            print(f"RECONCILIATION REJECTED: {exc}", file=sys.stderr)
+            return 2
+        print(f"Imported quota snapshot: {snapshot.snapshot_id}")
+        print(f"Provider/model: {snapshot.provider}/{snapshot.model}")
+        print(f"Account scope: {snapshot.account_scope}")
+        print(f"Captured at: {snapshot.captured_at_text()}")
+        print(f"Quota entries imported: {len(snapshot.quotas)}")
+        print("No API request was made.")
+        return 0
+
+    if args.provider_command == "reconcile-openrouter-key":
+        try:
+            payload = json.loads(args.response_file.read_text(encoding="utf-8"))
+            policy = registry.require("openrouter", args.model)
+            canonical = openrouter_key_response_to_snapshot(
+                payload, policy, account_scope=args.account_scope,
+                captured_at=args.captured_at, snapshot_id=args.snapshot_id or uuid.uuid4().hex,
+            )
+            snapshot = UsageLedger(args.ledger).import_snapshot(canonical, policy)
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError, UsageLedgerError, PolicyDenied) as exc:
+            print(f"RECONCILIATION REJECTED: {exc}", file=sys.stderr)
+            return 2
+        print(f"Imported OpenRouter quota snapshot: {snapshot.snapshot_id}")
+        print(f"Model: {snapshot.model}; account scope: {snapshot.account_scope}")
+        print(f"Captured at: {snapshot.captured_at_text()}")
+        print("Only the OpenRouter free-model daily request counter was imported.")
+        print("No API request was made by this command.")
+        return 0
+
     if args.provider_command == "list":
         policies = registry.list_models()
         if not policies:
@@ -213,11 +270,23 @@ def _run_provider(args: argparse.Namespace) -> int:
         statuses = ledger.usage(policy, account_scope=args.account_scope)
         print(f"Local usage for {policy.provider}/{policy.model} (account scope: {args.account_scope})")
         for item in statuses:
+            if not item.reconciled:
+                print(
+                    f"{item.metric} / {item.window_seconds}s / {item.scope}: "
+                    f"NOT RECONCILED; local-only reservations={item.local_used}"
+                )
+                continue
             print(
                 f"{item.metric} / {item.window_seconds}s / {item.scope}: "
-                f"{item.used}/{item.limit} used; {item.remaining} remaining"
+                f"{item.used}/{item.limit} used "
+                f"(external snapshot={item.snapshot_used}, later local={item.local_used}); "
+                f"{item.remaining} remaining"
             )
-        print("Only requests reserved by this workshop ledger are counted.")
+            print(
+                f"  Snapshot: {item.snapshot_captured_at}; resets: {item.snapshot_reset_at}; "
+                f"age: {item.snapshot_age_seconds}s; source: {item.snapshot_source_url}"
+            )
+        print("Only a fresh imported snapshot plus reservations in this local ledger are represented.")
         return 0
 
     try:
@@ -235,7 +304,7 @@ def _run_provider(args: argparse.Namespace) -> int:
             output_tokens=approval.output_tokens,
             neurons=args.neurons,
         )
-    except (PolicyDenied, QuotaExceeded) as exc:
+    except (PolicyDenied, QuotaExceeded, UsageLedgerError) as exc:
         print(f"DENIED: {exc}", file=sys.stderr)
         return 2
     print(f"APPROVED: {approval.provider}/{approval.model}")

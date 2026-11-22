@@ -18,3 +18,9 @@ coverage/
 
 # Local, manually verified provider permissions; never commit real allowlists.
 config/provider-catalog.json
+
+# Local provider quota snapshots and databases.
+*.sqlite3
+*.db
+*.quota-snapshot.json
+config/provider-quota-snapshot.json

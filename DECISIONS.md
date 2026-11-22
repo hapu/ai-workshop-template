@@ -2,6 +2,13 @@
 
 One entry per important decision, newest first. Supersede decisions instead of deleting them.
 
+## 2026-11-22: Require fresh external quota snapshots before inference
+- **Status:** accepted
+- **Decision:** Every quota window in an enabled model policy must have a fresh imported provider/dashboard snapshot before preflight or reservation. The snapshot is the external baseline; local reservations after its capture are added.
+- **Why:** A local ledger alone cannot see usage made by browser assistants, other machines, or external applications. Treating unknown external usage as zero could exceed a provider's free limit.
+- **Alternatives rejected:** Starting with zero local usage, assuming one provider limit applies to every account, or allowing calls when snapshot data is stale.
+- **Consequences / follow-up:** Snapshot age and reset boundaries are explicit. Add provider-specific automatic refresh only when a safe official endpoint exposes the necessary values; no live model may be enabled until account-level limits are reconciled.
+
 ## 2026-11-22: Reserve provider quotas before network I/O
 - **Status:** accepted
 - **Decision:** Use SQLite with `BEGIN IMMEDIATE` for local quota reservations. Every future adapter must be invoked through `execute_with_free_tier_gate`, which validates policy and commits quota reservation before calling the adapter.

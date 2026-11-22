@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import uuid
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
@@ -39,6 +42,19 @@ class ProviderRunnerTests(unittest.TestCase):
             "quotas": [{"metric": "requests", "window_seconds": 60, "limit": 1, "scope": "account"}],
         })
         self.registry = ProviderRegistry([self.policy])
+        now = time.time()
+        captured = datetime.fromtimestamp(now - 1, timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        reset = datetime.fromtimestamp(now + 59, timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        self.ledger.import_snapshot({
+            "schema_version": 1, "snapshot_id": uuid.uuid4().hex,
+            "provider": "fake", "model": "free-test", "account_scope": "fake-account",
+            "source_type": "manual", "source_url": "https://provider.example/dashboard",
+            "captured_at": captured,
+            "quotas": [{
+                "metric": "requests", "window_seconds": 60, "scope": "account",
+                "used": 0, "limit": 1, "reset_at": reset,
+            }],
+        }, self.policy)
 
     def call(self, provider: FakeProvider):
         return execute_with_free_tier_gate(

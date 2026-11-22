@@ -29,6 +29,7 @@ class QuotaLimit:
     window_seconds: int
     limit: int
     scope: str
+    snapshot_max_age_seconds: int
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "QuotaLimit":
@@ -56,7 +57,16 @@ class QuotaLimit:
             )
         if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
             raise ProviderCatalogError("Quota limit must be a positive integer")
-        return cls(metric, window, limit, scope)
+        max_age = raw.get("snapshot_max_age_seconds", min(300, window))
+        if (
+            isinstance(max_age, bool)
+            or not isinstance(max_age, int)
+            or not 1 <= max_age <= window
+        ):
+            raise ProviderCatalogError(
+                "Quota snapshot_max_age_seconds must be a positive integer no greater than its window"
+            )
+        return cls(metric, window, limit, scope, max_age)
 
 
 @dataclass(frozen=True, slots=True)

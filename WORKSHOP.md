@@ -41,13 +41,13 @@ Task data lives under `.workshop/` and is ignored by Git. The context builder re
 
 ## 4. Provider contracts and zero-cost policy
 
-`workshop/providers/base.py` defines the adapter contract. `workshop/providers/policy.py` validates the model policy and `workshop/providers/usage_ledger.py` atomically reserves request/token quotas in a local SQLite ledger. `workshop/providers/runner.py` is the supported adapter entry point: it authorizes, reserves quota, and only then calls the provider. No actual inference adapters are included and the default catalog is empty.
+`workshop/providers/base.py` defines the adapter contract. `workshop/providers/policy.py` validates model policy. `workshop/providers/reconciliation.py` validates imported dashboard/API snapshots. `workshop/providers/usage_ledger.py` atomically combines provider-reported usage with later local reservations. `workshop/providers/runner.py` is the supported adapter entry point: it requires fresh snapshots, authorizes, reserves quota, and only then calls the provider. No actual inference adapters are included and the default catalog is empty.
 
 Before adding a model policy, verify official pricing, whether access is genuinely free rather than trial/credits, eligible regions and account types, current model/project limits, and terms. Include verification and expiry dates, official HTTPS source links, and quota windows. The policy gate rejects any unknown, unverified, expired, non-zero-priced, disabled, region-ineligible, or over-limit model.
 
 The usage ledger reserves requests, input/output tokens, and Neurons atomically before a model call. A Neuron-metered request is denied unless the policy explicitly contains a Neuron quota. The caller must provide a conservative input-token estimate covering system instructions, all messages, and included context; the package has no generic tokenizer. The maximum output count is reserved. Reservations are not refunded after uncertain transport failures. All local use of the same provider quota boundary must share the same non-secret `account_scope` alias and local ledger. Usage outside this device/ledger is not visible to it; check provider dashboards and reconcile external usage before enabling live adapters.
 
-Do not bypass `execute_with_free_tier_gate` in a future provider adapter. A CLI preflight is read-only and does not reserve a request. Neither it nor the local ledger guarantees provider-side availability or enforces external billing settings.
+Do not bypass `execute_with_free_tier_gate` in a future provider adapter. A CLI preflight is read-only and does not reserve a request. OpenRouter's `GET /api/v1/key` conversion imports its daily free-model request count; it does not report every minute/model limit. The generic snapshot importer can also accept manually captured dashboard values and rate-limit headers. Neither the local ledger nor a snapshot guarantees provider-side availability or enforces external billing settings.
 
 ## 5. Coding agent and browser workflow
 
