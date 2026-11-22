@@ -4,7 +4,7 @@ Newest first, with ISO dates. Archive older entries after ~20 entries or 3,000 w
 
 ## 2026-11-22 (OpenRouter adapter foundation)
 - **Change:** Added a standard-library OpenRouter Chat Completions adapter and `provider chat` CLI path. Requests use the exact catalog model ID, disable provider-level fallback, disable retries, avoid logging prompt/key/response bodies on errors, and are invoked only through the shared policy gate and atomic quota ledger. No model was enabled and no live request was made.
-- **Verification:** Adapter tests cover request shape, exact model pinning, disabled fallbacks, response parsing, sanitized HTTP errors, no retries, and reservation-before-network behavior. Hosted CI result will be recorded after the PR run completes.
+- **Verification:** Adapter tests cover request shape, exact model pinning, disabled fallbacks, response parsing, sanitized HTTP errors, no retries, and reservation-before-network behavior. **Hosted CI:** [run 45061270564](https://github.com/hapu/ai-workshop-template/actions/runs/45061270564) passed on Python 3.10–3.13. All 99 unit tests, word-budget checks, and repository smoke tests passed.
 - **Follow-up:** Verify account-specific free-tier status, exact model and quota limits, region, billing safeguards, and external usage before adding an enabled local model policy.
 
 ## 2026-11-22 (Groq quota header reconciliation)

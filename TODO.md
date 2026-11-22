@@ -20,4 +20,4 @@ Template-maintenance backlog. Keep one active task under Now and make each item 
 - [ ] Add Git branch preparation and approval-gated pull-request helpers.
 
 ## Blocked / needs decision
-- [ ] Provider integration order: choose based on current official free-tier eligibility, limits, region, and reliability.
+- [ ] Add a second provider only after OpenRouter account-level eligibility, quota, and no-billing safeguards are verified.
