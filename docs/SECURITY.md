@@ -11,7 +11,7 @@
 
 ## Provider and spending controls
 - The provider preflight denies unknown, disabled, trial-only, unverified, expired, region-ineligible, non-zero-priced, or over-limit models.
-- The local quota ledger reserves requests/token units atomically before inference; future adapters must use `execute_with_free_tier_gate`, not raw provider methods.
+- The local quota ledger reserves requests/token units atomically before inference; all adapters must use `execute_with_free_tier_gate`, not raw provider methods.
 - Use the same non-secret `account_scope` alias for every credential and local task using the same provider account. A new alias can reset local accounting, so do not create additional aliases for one account to evade a limit.
 - The local ledger cannot see usage from other devices/apps. Check the actual provider dashboard before every adapter is enabled and block calls when external usage is unknown.
 - Every quota window requires a fresh provider/dashboard snapshot; missing, stale, expired, or limit-mismatched snapshots block the request.
