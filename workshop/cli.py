@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -13,6 +14,9 @@ from .context_manager import ContextError, ContextManager
 from .handoff import render_handoff
 from .models import TASK_STATUSES, Task
 from .providers.policy import FreeTierGate, PolicyDenied, ProviderCatalogError, ProviderRegistry
+from .providers.base import Message
+from .providers.openrouter import OpenRouterAdapter, ProviderTransportError
+from .providers.runner import execute_with_free_tier_gate
 from .providers.reconciliation import (
     groq_response_headers_to_snapshot,
     openrouter_key_response_to_snapshot,
@@ -91,6 +95,17 @@ def _parser() -> argparse.ArgumentParser:
     preflight.add_argument("--quota-scope", action="append", default=[], metavar="TYPE=ALIAS", help="quota boundary alias; repeat for organization/project")
     preflight.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
     preflight.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
+
+    chat = provider_commands.add_parser("chat", help="send one OpenRouter request through the free-tier gate")
+    chat.add_argument("model", help="exact model ID from the verified local catalog")
+    chat.add_argument("--message", required=True)
+    chat.add_argument("--input-tokens", type=int, required=True, help="conservative estimate including all message context")
+    chat.add_argument("--max-output-tokens", type=int, required=True)
+    chat.add_argument("--region", required=True)
+    chat.add_argument("--account-scope", default="default")
+    chat.add_argument("--quota-scope", action="append", default=[], metavar="TYPE=ALIAS")
+    chat.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
+    chat.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
 
     usage = provider_commands.add_parser("usage", help="show local reserved quota usage")
     usage.add_argument("provider")
@@ -262,6 +277,49 @@ def _parse_quota_scopes(values: list[str]) -> dict[str, str]:
 
 def _run_provider(args: argparse.Namespace) -> int:
     registry = ProviderRegistry.load(args.catalog)
+    if args.provider_command == "chat":
+        try:
+            registry.require("openrouter", args.model)
+            api_key = os.environ.get("OPENROUTER_API_KEY", "")
+            if not api_key.strip():
+                raise PolicyDenied("OPENROUTER_API_KEY is not set; no quota was reserved")
+            result = execute_with_free_tier_gate(
+                OpenRouterAdapter(api_key),
+                registry=registry,
+                ledger=UsageLedger(args.ledger),
+                model=args.model,
+                messages=[Message(role="user", content=args.message)],
+                input_tokens=args.input_tokens,
+                max_output_tokens=args.max_output_tokens,
+                region=args.region,
+                account_scope=args.account_scope,
+                quota_scopes=_parse_quota_scopes(args.quota_scope),
+                request_id=uuid.uuid4().hex,
+            )
+        except (PolicyDenied, QuotaExceeded, UsageLedgerError, ProviderTransportError, ValueError) as exc:
+            print(f"DENIED / REQUEST FAILED: {exc}", file=sys.stderr)
+            return 2
+        sys.stdout.write(result.response.text)
+        if not result.response.text.endswith("\\n"):
+            sys.stdout.write("\\n")
+        print(
+            f"\\nProvider: {result.response.provider}; model: {result.response.model}; "
+            f"request ID: {result.response.request_id or 'not supplied'}",
+            file=sys.stderr,
+        )
+        for quota in result.reservation.quotas:
+            print(
+                f"Reserved quota {quota.metric}/{quota.window_seconds}s/"
+                f"{quota.scope}={quota.scope_id}: {quota.requested}",
+                file=sys.stderr,
+            )
+        if result.response.input_tokens is not None or result.response.output_tokens is not None:
+            print(
+                f"Provider-reported input/output tokens: {result.response.input_tokens}/"
+                f"{result.response.output_tokens}",
+                file=sys.stderr,
+            )
+        return 0
     if args.provider_command == "reconcile":
         try:
             raw = json.loads(args.snapshot_file.read_text(encoding="utf-8"))

@@ -31,7 +31,7 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [x] Research current provider free-tier status and document official sources.
 - [ ] Add authenticated provider quota refresh for each supported quota dimension.
 - [ ] Verify current provider/model terms and account-level quotas before adding approved entries.
-- [ ] Add provider adapters that call the shared runner before every request.
+- [x] Add a minimal OpenRouter Chat Completions adapter that uses the shared runner.
 - [ ] Reconcile usage from other devices and browser/API tools before enabling adapters.
 - [ ] Add rate-limit handling and measured fallback without paid-model substitution.
 

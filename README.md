@@ -58,6 +58,13 @@ python3 -m workshop provider reconcile .workshop/provider-snapshot.json
 # Inspect reconciled usage and local reservations.
 python3 -m workshop provider usage PROVIDER MODEL \
   --account-scope my-provider-project
+
+# Once a verified OpenRouter policy and fresh snapshots exist, send a gated request.
+# Set OPENROUTER_API_KEY in your shell environment first.
+python3 -m workshop provider chat exact/model-id:free \
+  --message "Explain the current task architecture." \
+  --input-tokens 1200 --max-output-tokens 400 --region MX \
+  --account-scope openrouter-personal
 ```
 
 The gate denies unknown, disabled, trial-only, unverified, expired, non-zero-priced, region-ineligible, or over-limit model policies. It requires current official HTTPS pricing and terms sources, per-request token limits, and quota windows. `provider preflight` is read-only and does not reserve usage. Future adapters must use `execute_with_free_tier_gate` from `workshop/providers/runner.py`: it verifies the policy, atomically reserves quota in SQLite, and only then invokes the adapter.

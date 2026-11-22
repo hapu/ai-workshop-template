@@ -4,7 +4,7 @@ This document describes the master template's current executable slice and inten
 
 ## Overview
 
-A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded context bundles, and portable handoffs. A separate provider-policy layer defines the future adapter contract and checks whether a model can be proven zero-cost before any future adapter sends a request. No inference adapters or approved model catalog entries are included.
+A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded context bundles, and portable handoffs. The provider-policy layer checks whether a model can be proven zero-cost before an adapter sends a request. A minimal OpenRouter adapter is present; the approved model catalog remains empty by default.
 
 ## Current components
 
@@ -17,6 +17,7 @@ A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded
 - `workshop/providers/reconciliation.py` - validation and normalization of dashboard/API snapshots, including saved OpenRouter and Groq evidence converters.
 - `workshop/providers/usage_ledger.py` - schema-versioned SQLite snapshots plus atomic reservations mapped to independent quota boundaries; combined-token quotas count input plus output reservations.
 - `workshop/providers/runner.py` - the only supported adapter invocation path; policy check and quota reservation happen before `complete`.
+- `workshop/providers/openrouter.py` - standard-library OpenRouter Chat Completions adapter; no retries, streaming, model fallback, or provider fallback.
 - `config/provider-catalog.example.json` - empty catalog example; no model is pre-approved.
 - `.workshop/` - local task/context output; ignored by Git.
 
@@ -26,7 +27,7 @@ Task JSON updates use unique temporary files in the destination directory, flush
 
 ## Provider policy
 
-A model must be enabled, classified as `free_tier`, marked verified, within its verification dates, supported in the requested region, linked to official HTTPS pricing/terms, priced at exactly zero for input and output, and within token limits. Unknown policies are denied. The local catalog is `config/provider-catalog.json` and is gitignored. A future adapter must use the gate before making network requests; the gate itself never calls providers.
+A model must be enabled, classified as `free_tier`, marked verified, within its verification dates, supported in the requested region, linked to official HTTPS pricing/terms, priced at exactly zero for input and output, and within token limits. Unknown policies are denied. The local catalog is `config/provider-catalog.json` and is gitignored. Every adapter must use the gate before making network requests; the gate itself never calls providers. The OpenRouter adapter sends the exact catalog model ID and disables provider-level fallbacks.
 
 ## Context policy
 
@@ -36,7 +37,7 @@ Only `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/ARCHITECT
 
 - Python 3.10+; standard library only for the current runtime.
 - No paid usage without explicit user approval; uncertain pricing or eligibility must fail closed.
-- Live provider API adapters, automatic authenticated quota refresh, and cross-device quota synchronization are not implemented. Groq header and OpenRouter key-response converters import saved evidence only.
+- Automatic authenticated quota refresh and cross-device quota synchronization are not implemented. Groq header and OpenRouter key-response converters import saved evidence only. The OpenRouter chat adapter is implemented but cannot run until a verified local model policy and fresh quota snapshots are configured.
 - Keep the runtime usable on a low-memory Chromebook; avoid Docker, local LLMs, and heavy databases.
 
 

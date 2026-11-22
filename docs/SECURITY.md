@@ -19,7 +19,8 @@
 - Imported snapshots are only as complete as the captured source data. A snapshot for one limit dimension does not prove that other request/token limits are reconciled.
 - A reservation is not refunded after timeouts or ambiguous failures; the provider may have received the request.
 - Pricing and eligibility must be backed by current official HTTPS sources and an expiry date.
-- A future provider adapter must call the gate before every request. No adapter may silently fall back to an unknown or paid model.
+- Every provider adapter must call the gate before every request. The OpenRouter adapter sends an exact model ID, sets `provider.allow_fallbacks` to `false`, and never retries. No adapter may silently fall back to an unknown or paid model.
+- The tracked model catalog stays empty. A configured OpenRouter key alone is not permission to send; policy and fresh quota snapshots must pass first.
 - The local policy gate is not an account spending cap and does not guarantee provider-side availability. Configure provider-side limits when available.
 - Follow provider terms and rate limits. Do not create extra accounts or keys to evade quotas.
 - No paid usage without explicit approval.

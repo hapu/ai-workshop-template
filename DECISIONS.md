@@ -2,6 +2,13 @@
 
 One entry per important decision, newest first. Supersede decisions instead of deleting them.
 
+## 2026-11-22: Add OpenRouter adapter without enabling a model
+- **Status:** accepted
+- **Decision:** Add a standard-library OpenRouter Chat Completions adapter behind the existing policy gate and usage ledger. Pin each request to the exact catalog model, disable provider-level fallback, disable retries, and keep the tracked model catalog empty.
+- **Why:** This creates a usable first adapter without weakening the zero-cost checks or adding runtime dependencies. A provider error or timeout must surface rather than silently trying another provider or model.
+- **Alternatives rejected:** Automatic model/provider failover, retries after ambiguous failures, and enabling a public free model without account-specific quota evidence.
+- **Consequences / follow-up:** Live requests remain blocked until the account's exact model eligibility, pricing, limits, region, billing settings, and external usage are verified and fresh snapshots are imported.
+
 ## 2026-11-22: Require fresh external quota snapshots before inference
 - **Status:** accepted
 - **Decision:** Every quota window in an enabled model policy must have a fresh imported provider/dashboard snapshot before preflight or reservation. The snapshot is the external baseline; local reservations after its capture are added.

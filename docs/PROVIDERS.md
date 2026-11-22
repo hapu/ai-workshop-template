@@ -106,7 +106,13 @@ python3 -m workshop provider reconcile-groq-headers /tmp/groq-rate-limits.json \
 The converter recognizes only account-scoped requests/86400 (RPD) and combined tokens/60 (TPM) policy windows, and it requires each header limit to match the catalog exactly. Reset durations are relative to --captured-at. The ledger counts conservative input-token estimates plus the reserved maximum output tokens against combined tokens. Groq also documents dashboard-only and other dimensions (including separate input/output token limits when configured); those are not inferred from these headers and must be independently reconciled when present in the model policy. The command reads a saved file only and makes no API request. See the official [Groq rate-limit documentation](https://console.groq.com/docs/rate-limits).
 Groq documents organization-level rate limits and also supports project-specific per-model overrides. The response headers do not identify the project, and this importer does not reconcile project overrides or separate ITPM/OTPM values. Do not use it as the sole quota evidence if project overrides or separate input/output limits are configured. In that case, keep the model disabled until every applicable organization and project quota can be represented and reconciled. See [Groq Projects](https://console.groq.com/docs/projects) for project rate-limit behavior.
 
-`provider preflight` is read-only: it checks whether one additional request currently fits but does not reserve it. A future adapter must use `execute_with_free_tier_gate` from `workshop/providers/runner.py`, which verifies the model policy, requires fresh snapshots, atomically reserves quota, and only then calls the adapter. Do not call an adapter's raw `complete` method directly. No live adapters are included yet.
+`provider preflight` is read-only: it checks whether one additional request currently fits but does not reserve it. Every adapter must use `execute_with_free_tier_gate` from `workshop/providers/runner.py`, which verifies the model policy, requires fresh snapshots, atomically reserves quota, and only then calls the adapter. Do not call an adapter's raw `complete` method directly.
+
+### OpenRouter adapter
+
+`workshop/providers/openrouter.py` implements non-streaming Chat Completions using `urllib` (no third-party dependency). The CLI entry point is `provider chat MODEL --message TEXT --input-tokens N --max-output-tokens N --region MX --account-scope ALIAS`. Set `OPENROUTER_API_KEY` in the environment; never put it in the catalog or command line. The adapter sends the exact model ID, does not send a `models` fallback list, sets `provider.allow_fallbacks` to `false`, and never retries a request. It returns provider-reported token counts and a request/generation ID when supplied. Error messages omit response bodies and credentials. A request that times out or fails after reservation is not refunded.
+
+The adapter does not enable any model. The tracked catalog is empty, and the local catalog must contain a verified `openrouter` policy plus fresh snapshots for every configured quota window before `provider chat` can reach the network. OpenRouter's request and routing controls are documented at <https://openrouter.ai/docs/api/api-reference/chat/send-chat-completion-request> and <https://openrouter.ai/docs/guides/routing/provider-selection>. Disabling provider fallback can reduce availability; failures are surfaced rather than routed elsewhere.
 
 The ledger and imported snapshots are local to this machine and database file. They do not coordinate other devices or update provider-side quotas. Before enabling an adapter, reconcile every source of usage for that provider account, including external apps and devices, and make sure the local account-scope alias represents the same quota boundary.
 
@@ -114,6 +120,7 @@ The ledger and imported snapshots are local to this machine and database file. T
 
 | Date | Provider / model | What changed / official source |
 | :--- | :--- | :--- |
+| 2026-11-22 | OpenRouter adapter | Added standard-library Chat Completions adapter, exact-model requests, provider fallback disabled, no retries, and gated CLI entry point. No model enabled. |
 | 2026-11-22 | Groq response headers | Added saved-header conversion for RPD and combined TPM; other account limits still require separate reconciliation. No model enabled. |
 | 2026-11-21 | Initial provider review | Added official-source assessment and exclusions/candidates above. No models approved for the local catalog. |
 
