@@ -300,10 +300,10 @@ def _run_provider(args: argparse.Namespace) -> int:
             print(f"DENIED / REQUEST FAILED: {exc}", file=sys.stderr)
             return 2
         sys.stdout.write(result.response.text)
-        if not result.response.text.endswith("\\n"):
-            sys.stdout.write("\\n")
+        if not result.response.text.endswith("\n"):
+            sys.stdout.write("\n")
         print(
-            f"\\nProvider: {result.response.provider}; model: {result.response.model}; "
+            f"\nProvider: {result.response.provider}; model: {result.response.model}; "
             f"request ID: {result.response.request_id or 'not supplied'}",
             file=sys.stderr,
         )

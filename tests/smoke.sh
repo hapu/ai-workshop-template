@@ -43,6 +43,7 @@ done
 
 if command -v python3 >/dev/null 2>&1; then
   if python3 -m workshop --version >/dev/null; then ok "CLI starts"; else bad "CLI starts"; fi
+  if python3 -m workshop provider chat --help >/dev/null; then ok "OpenRouter chat CLI help"; else bad "OpenRouter chat CLI help"; fi
   if python3 -m unittest discover -s tests/unit -v; then ok "Python unit tests"; else bad "Python unit tests"; fi
   if python3 - <<'PY'
 from pathlib import Path
