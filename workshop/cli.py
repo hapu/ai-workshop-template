@@ -233,8 +233,8 @@ def _parse_quota_scopes(values: list[str]) -> dict[str, str]:
         if "=" not in item:
             raise UsageLedgerError("Each --quota-scope must use TYPE=ALIAS")
         scope, alias = item.split("=", 1)
-        if scope not in {"account", "organization", "project"} or not alias.strip():
-            raise UsageLedgerError("Quota scopes must use account, organization, or project with a non-empty alias")
+        if scope not in {"organization", "project"} or not alias.strip():
+            raise UsageLedgerError("Quota scopes must use organization or project with a non-empty alias")
         if scope in result:
             raise UsageLedgerError(f"Quota scope {scope} was supplied more than once")
         result[scope] = alias.strip()
@@ -330,7 +330,7 @@ def _run_provider(args: argparse.Namespace) -> int:
                 )
                 continue
             print(
-                f"{item.metric} / {item.window_seconds}s / {item.scope}: "
+                f"{item.metric} / {item.window_seconds}s / {item.scope}={item.scope_id}: "
                 f"{item.used}/{item.limit} used "
                 f"(external snapshot={item.snapshot_used}, later local={item.local_used}); "
                 f"{item.remaining} remaining"
