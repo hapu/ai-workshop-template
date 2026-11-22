@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-QUOTA_METRICS = frozenset({"requests", "input_tokens", "output_tokens", "neurons"})
+QUOTA_METRICS = frozenset({"requests", "tokens", "input_tokens", "output_tokens", "neurons"})
 QUOTA_SCOPES = frozenset({"account", "model"})
 MAX_QUOTA_WINDOW_SECONDS = 365 * 24 * 60 * 60
 
