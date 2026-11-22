@@ -84,6 +84,13 @@ class QuotaScopeV2Tests(unittest.TestCase):
             self.ledger.import_snapshot(raw, self.policy, now=1001)
 
 
+
+    def test_account_and_model_scope_ids_cannot_be_relabelled(self):
+        raw = self.snapshot()
+        raw["quotas"][0]["scope_id"] = "different-account"
+        with self.assertRaisesRegex(UsageLedgerError, "must match"):
+            self.ledger.import_snapshot(raw, self.policy, now=1001)
+
     def test_project_boundary_aggregates_usage_across_models(self):
         self.ledger.import_snapshot(self.snapshot(), self.policy, now=1001)
         other_raw = self.snapshot()
