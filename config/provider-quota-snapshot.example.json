@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "snapshot_id": "replace-with-a-new-unique-id",
+  "provider": "example-provider-id",
+  "model": "exact-model-id-from-provider-catalog",
+  "account_scope": "non-secret-provider-project-alias",
+  "source_type": "manual",
+  "source_url": "https://provider.example/dashboard/limits",
+  "captured_at": "2026-11-21T12:00:00Z",
+  "quotas": [
+    {
+      "metric": "requests",
+      "window_seconds": 60,
+      "scope": "account",
+      "used": 2,
+      "limit": 20,
+      "reset_at": "2026-11-21T12:01:00Z"
+    },
+    {
+      "metric": "requests",
+      "window_seconds": 86400,
+      "scope": "account",
+      "used": 8,
+      "limit": 50,
+      "reset_at": "2026-11-22T00:00:00Z"
+    }
+  ]
+}

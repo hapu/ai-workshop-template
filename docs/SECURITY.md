@@ -5,7 +5,8 @@
 - Keep secret files in `.gitignore`; keep only variable names in `config/examples/env.example`.
 - Store keys in environment variables via a shell profile (`chmod 600`) or a password manager. Do not sync plaintext secret files through cloud storage.
 - Never paste secrets into Markdown context files, task descriptions, or handoff prompts.
-- `.workshop/` stores local task descriptions, notes, project paths, and generated context bundles. Treat it as private and keep it out of Git.
+- `.workshop/` stores local task descriptions, notes, project paths, generated context bundles, quota snapshots, and the SQLite usage ledger. Treat it as private and keep it out of Git.
+- External quota snapshot files contain account usage metadata. Never include API keys, Authorization headers, cookies, or secret fields. The importer rejects known credential field names.
 - `config/provider-catalog.json` is a local policy file and is ignored by Git. The tracked example intentionally contains an empty model list.
 
 ## Provider and spending controls
@@ -13,7 +14,9 @@
 - The local quota ledger reserves requests/token units atomically before inference; future adapters must use `execute_with_free_tier_gate`, not raw provider methods.
 - Use the same non-secret `account_scope` alias for every credential and local task using the same provider account. A new alias can reset local accounting, so do not create additional aliases for one account to evade a limit.
 - The local ledger cannot see usage from other devices/apps. Check the actual provider dashboard before every adapter is enabled and block calls when external usage is unknown.
+- Every quota window requires a fresh provider/dashboard snapshot; missing, stale, expired, or limit-mismatched snapshots block the request.
 - Preflight is not a reservation and must never be treated as approval to send.
+- Imported snapshots are only as complete as the captured source data. A snapshot for one limit dimension does not prove that other request/token limits are reconciled.
 - A reservation is not refunded after timeouts or ambiguous failures; the provider may have received the request.
 - Pricing and eligibility must be backed by current official HTTPS sources and an expiry date.
 - A future provider adapter must call the gate before every request. No adapter may silently fall back to an unknown or paid model.

@@ -22,11 +22,14 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [x] Add SQLite quota ledger with atomic concurrent reservations and account/model scopes.
 - [x] Require Neuron quota definitions for nonzero Neuron-metered requests.
 - [x] Add a shared provider runner that reserves usage before invoking an adapter.
+- [x] Import provider/dashboard quota snapshots and require fresh data for every quota window.
+- [x] Combine imported provider usage with later local reservations without double-counting.
+- [x] Convert the OpenRouter key endpoint's daily free-model counter into a snapshot.
 - [x] Research current provider free-tier status and document official sources.
-- [ ] Verify current provider/model terms and add only individually verified entries.
+- [ ] Add authenticated provider quota refresh for each supported quota dimension.
+- [ ] Verify current provider/model terms and account-level quotas before adding approved entries.
 - [ ] Add provider adapters that call the shared runner before every request.
-- [ ] Reconcile external provider usage and live account quotas before enabling adapters.
-- [ ] Add shared usage-state support or import/reconciliation for other devices and browser/API tools.
+- [ ] Reconcile usage from other devices and browser/API tools before enabling adapters.
 - [ ] Add rate-limit handling and measured fallback without paid-model substitution.
 
 ## Phase 4: Browser assistant interoperability
@@ -41,6 +44,7 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [ ] Add rollback and recovery procedures.
 
 ## Phase 6: Monitoring and maintenance
-- [ ] Add quota and usage reporting without storing API secrets.
+- [x] Add local quota usage reporting without storing API secrets.
+- [ ] Add quota dashboard/API refresh and cross-device reconciliation.
 - [ ] Add scheduled provider re-verification.
 - [ ] Add end-to-end tests for routing, free-only enforcement, and recovery.

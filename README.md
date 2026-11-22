@@ -49,16 +49,38 @@ python3 -m workshop provider preflight PROVIDER MODEL \
   --input-tokens 1200 --output-tokens 400 --region MX \
   --account-scope my-provider-project
 
-# Inspect local reservations.
+# Copy and edit the example with the latest dashboard/API usage values.
+mkdir -p .workshop
+cp config/provider-quota-snapshot.example.json .workshop/provider-snapshot.json
+# Then import it after filling in the actual source, used/limit and reset values.
+python3 -m workshop provider reconcile .workshop/provider-snapshot.json
+
+# Inspect reconciled usage and local reservations.
 python3 -m workshop provider usage PROVIDER MODEL \
   --account-scope my-provider-project
 ```
 
 The gate denies unknown, disabled, trial-only, unverified, expired, non-zero-priced, region-ineligible, or over-limit model policies. It requires current official HTTPS pricing and terms sources, per-request token limits, and quota windows. `provider preflight` is read-only and does not reserve usage. Future adapters must use `execute_with_free_tier_gate` from `workshop/providers/runner.py`: it verifies the policy, atomically reserves quota in SQLite, and only then invokes the adapter.
 
-The local quota ledger uses `.workshop/provider-usage.sqlite3`. `--account-scope` is a non-secret label for the provider quota boundary (often an organization or project): use the same label for every credential that shares that provider quota, and a different label for a separate quota boundary. Do not put API keys in the label. Input token counts passed to the runner must conservatively include all system messages, project context, and user messages; this package does not estimate tokens automatically. Maximum output tokens are reserved. Neuron-metered requests are rejected unless the model policy contains a Neuron quota. Reservations are not refunded after ambiguous transport failures.
+The local quota ledger uses `.workshop/provider-usage.sqlite3`. `--account-scope` is a non-secret label for the provider quota boundary (often an organization or project): use the same label for every credential that shares that provider quota. Do not put API keys in the label. The ledger requires a fresh external snapshot for every quota window before preflight or reservation can succeed. Snapshot age limits are specified in the model policy. Reservations made after the snapshot capture are added to provider-reported usage; earlier local reservations are assumed to be included in the snapshot.
 
-The ledger counts only requests routed through this local installation and database. It does not see other machines, browser assistants, apps, or provider dashboard usage, and it does not fetch provider-side quota balances. The CLI preflight is a read-only snapshot and can become stale immediately; the runner's atomic reservation is the actual local gate. Check the provider dashboard and reconcile external usage before enabling a live adapter. This local ledger is not a guarantee against provider-side billing on its own.
+Input token counts passed to the runner must conservatively include all system messages, project context, and user messages; this package does not estimate tokens automatically. Maximum output tokens are reserved. Neuron-metered requests are rejected unless the model policy contains a Neuron quota. Reservations are not refunded after ambiguous transport failures.
+
+The ledger counts only requests routed through this local installation and database. It does not fetch provider balances or see usage from other machines, browser assistants, or external apps. If an external snapshot is missing, stale, expired, or disagrees with the verified quota limit, requests are denied. A CLI preflight is read-only; the runner's atomic reservation is the call-time gate. Neither local control is a provider-side billing guarantee.
+
+### Import provider usage
+
+Generic snapshot format: copy `config/provider-quota-snapshot.example.json`, then fill in the exact provider, model, non-secret account scope, capture time, source, quota usage, verified limit, and provider reset time. Import it with `provider reconcile FILE`. The importer rejects credentials in the JSON, stale/future capture times, unknown quota windows, mismatched limits, and invalid reset times. A partial snapshot can be imported, but requests remain blocked until every quota window in the model policy has a fresh matching snapshot.
+
+For OpenRouter, save the sanitized JSON body from `GET https://openrouter.ai/api/v1/key` and convert its daily free-model request counter with:
+
+```bash
+python3 -m workshop provider reconcile-openrouter-key /tmp/openrouter-key-status.json \
+  --model "exact/model-id:free" --account-scope openrouter-personal \
+  --captured-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
+
+OpenRouter's key endpoint provides the free-model daily request count, not every per-minute/model-provider quota. Other required windows still need their own current snapshot. Do not put the API key or Authorization header in the saved response file. See `docs/PROVIDERS.md` for provider-specific limits and the snapshot format.
 
 No live API adapters or approved model entries are included. The provider comparison and official sources are in `docs/PROVIDERS.md`.
 

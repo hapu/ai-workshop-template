@@ -12,15 +12,16 @@
 1. Add discrete steps with `python3 -m workshop task checkpoint add TASK_ID "Step title"`.
 2. Complete steps with `python3 -m workshop task checkpoint complete TASK_ID CHECKPOINT_ID`; add findings with `python3 -m workshop task note`.
 3. Make one coherent change at a time, small enough to review.
-4. Before any inference adapter sends a request, verify the exact model and account policy, then invoke the adapter through `execute_with_free_tier_gate`. Never call a raw adapter directly.
-5. The CLI preflight is read-only and does not reserve usage. The runner performs the local atomic reservation immediately before network I/O.
-6. Use one non-secret `account_scope` for all credentials that share the same provider account/quota. The local ledger cannot see usage from other devices, browser assistants, or provider dashboards; reconcile those sources before enabling live adapters.
-7. Reservations are not refunded after timeouts or ambiguous transport failures. Treat the provider as having possibly received the request.
-8. Do not infer a free tier from a model name or provider reputation. Add catalog entries only after verifying official pricing, terms, model limits, account eligibility, and region.
-9. Do not enable live adapters until account-specific remaining quotas are known and provider-side spending safeguards are configured where available.
-10. Run `python3 -m unittest discover -s tests/unit -v` and `bash scripts/check-words.sh && bash tests/smoke.sh` after code or documentation changes.
-11. Update docs when behavior, setup, or decisions change.
-12. Never overwrite another device's uncommitted work. Use separate branches for simultaneous changes.
+4. Import a recent provider/dashboard snapshot for every quota window using `python3 -m workshop provider reconcile SNAPSHOT.json`. For OpenRouter's daily free-model request count, use `provider reconcile-openrouter-key` with a saved `GET /api/v1/key` response.
+5. Before any inference adapter sends a request, verify the exact model and account policy, then invoke the adapter through `execute_with_free_tier_gate`. Never call a raw adapter directly.
+6. The CLI preflight is read-only and does not reserve usage. The runner requires fresh snapshots and performs the local atomic reservation immediately before network I/O.
+7. Use one non-secret `account_scope` for all credentials that share the same provider account/quota. The local ledger cannot see usage from other devices, browser assistants, or provider dashboards; reconcile those sources before enabling live adapters.
+8. Reservations are not refunded after timeouts or ambiguous transport failures. Treat the provider as having possibly received the request.
+9. Do not infer a free tier from a model name or provider reputation. Add catalog entries only after verifying official pricing, terms, model limits, account eligibility, and region.
+10. Do not enable live adapters until account-specific remaining quotas are known and provider-side spending safeguards are configured where available.
+11. Run `python3 -m unittest discover -s tests/unit -v` and `bash scripts/check-words.sh && bash tests/smoke.sh` after code or documentation changes.
+12. Update docs when behavior, setup, or decisions change.
+13. Never overwrite another device's uncommitted work. Use separate branches for simultaneous changes.
 
 ## End
 1. Export a handoff with `python3 -m workshop task handoff TASK_ID --output .workshop/handoff.md`.

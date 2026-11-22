@@ -8,7 +8,7 @@ Instructions for AI coding agents. Keep under 500 words.
 - **Run:** `python3 -m workshop --help` or `python3 -m workshop doctor`.
 - **Task state:** `python3 -m workshop task resume TASK_ID`.
 - **Context:** `python3 -m workshop context build --project . --output .workshop/context.md`.
-- **Provider safety:** `python3 -m workshop provider preflight PROVIDER MODEL --input-tokens N --output-tokens N --region REGION --account-scope PROJECT` and `python3 -m workshop provider usage PROVIDER MODEL --account-scope PROJECT`.
+- **Provider safety:** `python3 -m workshop provider reconcile SNAPSHOT.json`, then `python3 -m workshop provider preflight PROVIDER MODEL --input-tokens N --output-tokens N --region REGION --account-scope PROJECT` and `python3 -m workshop provider usage PROVIDER MODEL --account-scope PROJECT`.
 - **Usage:** `python3 -m workshop provider usage PROVIDER MODEL --account-scope ACCOUNT_ALIAS`.
 - **Test:** `python3 -m unittest discover -s tests/unit -v` and `bash scripts/check-words.sh && bash tests/smoke.sh`.
 
@@ -24,7 +24,7 @@ Instructions for AI coding agents. Keep under 500 words.
 - **Output discipline:** Keep terminal output small. Pipe verbose logs to `/tmp/` or tail the last 20 lines.
 - **Safety:** Never delete existing work, install dependencies, use paid APIs, or expose credentials without explicit approval.
 - **Provider policy:** Unknown, unverified, expired, non-zero-priced, disabled, region-ineligible, or over-limit models must be rejected. Provider adapters must use `execute_with_free_tier_gate`, which reserves quota before network I/O. Never call raw adapters directly.
-- **Quota scope:** Use one non-secret `account_scope` alias for all credentials sharing the same provider account. Local usage does not include external apps/devices; verify provider dashboards before enabling calls. Never refund ambiguous requests.
+- **Quota scope:** Use one non-secret `account_scope` alias for all credentials sharing the same provider account. Import a fresh snapshot for every policy quota window. Local usage does not include external apps/devices; reconcile provider dashboards before enabling calls. Never refund ambiguous requests.
 - **Scope:** Stay provider-agnostic. Do not invent quotas, capabilities, or compatibility claims.
 - **Editing boundaries:** Do not modify generated, vendored, or test files unless the task requires it.
 - **Docs:** Update docs when behavior or setup changes; do not leave stale paths or commands.

@@ -2,9 +2,14 @@
 
 Newest first, with ISO dates. Archive older entries after ~20 entries or 3,000 words.
 
+## 2026-11-22 (external quota reconciliation)
+- **Change:** Added a validated external quota snapshot format and CLI import, a provider/API snapshot baseline in SQLite, freshness and reset-time enforcement for every configured quota window, and local-reservation roll-forward without double-counting. Added a converter for OpenRouter's official `GET /api/v1/key` free-model daily counter. Updated provider docs and safety rules. No live provider adapter or inference request was added.
+- **Checks / result:** Added tests for missing/stale/expired snapshots, limit mismatch, secret-field rejection, duplicate import, model/account scopes, roll-forward accounting, and OpenRouter daily-counter conversion. Hosted CI for this commit remains to be checked.
+- **Follow-up:** Verify the actual account/project quota values and reconcile use outside this device before enabling an adapter. Add automatic provider usage refresh only where official APIs expose the required quota dimensions.
+
 ## 2026-11-22 (quota reservations)
 - **Change:** Added a SQLite-backed local quota ledger with atomic multi-window reservations, account/model scopes, request/token/Neuron tracking, and a shared provider runner that reserves before adapter execution. Added usage/preflight CLI commands, conservative-token-estimate documentation, and provider free-access assessment. No live adapters or enabled models were added.
-- **Checks / result:** 53 unit tests passed locally, including concurrent-reservation and fake-adapter tests that verify policy/quota denials prevent provider invocation. Python compilation, CLI/version and empty-catalog checks, word budgets, and shell syntax passed. The full smoke script passed; its Git-tracked-secret check was skipped because the local staging folder is not a Git checkout. Hosted CI for this commit remains to be checked.
+- **Checks / result:** 53 unit tests passed locally, including concurrent-reservation and fake-adapter tests that verify policy/quota denials prevent provider invocation. Python compilation, CLI/version and empty-catalog checks, word budgets, and shell syntax passed. Full smoke tests are included in CI; hosted CI for this commit remains to be checked.
 - **Follow-up:** Reconcile provider dashboard usage and account-specific limits before considering the first live adapter.
 
 ## 2026-11-22

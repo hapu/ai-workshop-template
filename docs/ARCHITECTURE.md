@@ -14,7 +14,8 @@ A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded
 - `workshop/handoff.py` - Markdown handoffs with checkpoint state.
 - `workshop/providers/base.py` - provider-neutral message, response, and adapter protocol.
 - `workshop/providers/policy.py` - strict catalog parsing and fail-closed free-tier preflight, including quota-window definitions.
-- `workshop/providers/usage_ledger.py` - SQLite quota accounting with atomic multi-window reservations.
+- `workshop/providers/reconciliation.py` - validation and normalization of dashboard/API quota snapshots.
+- `workshop/providers/usage_ledger.py` - SQLite external snapshots plus atomic multi-window local reservations.
 - `workshop/providers/runner.py` - the only supported adapter invocation path; policy check and quota reservation happen before `complete`.
 - `config/provider-catalog.example.json` - empty catalog example; no model is pre-approved.
 - `.workshop/` - local task/context output; ignored by Git.

@@ -6,7 +6,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import date
+import time
+import uuid
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from workshop.providers.policy import (
@@ -161,12 +163,26 @@ class ProviderPolicyTests(unittest.TestCase):
             }
             catalog.write_text(json.dumps({"schema_version": 1, "models": [limited_policy]}), encoding="utf-8")
             policy = ModelPolicy.from_dict(limited_policy)
-            UsageLedger(ledger_path).reserve(
-                policy,
-                account_scope="my-project",
-                input_tokens=100,
-                output_tokens=50,
-                now=__import__("time").time(),
+            now = time.time()
+            to_text = lambda value: datetime.fromtimestamp(value, timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            snapshot = {
+                "schema_version": 1, "snapshot_id": uuid.uuid4().hex,
+                "provider": "example", "model": "example-free-model",
+                "account_scope": "my-project", "source_type": "manual",
+                "source_url": "https://provider.example/dashboard",
+                "captured_at": to_text(now - 1),
+                "quotas": [
+                    {"metric": quota["metric"], "window_seconds": quota["window_seconds"],
+                     "scope": quota["scope"], "used": 0, "limit": quota["limit"],
+                     "reset_at": to_text(now - 1 + quota["window_seconds"])}
+                    for quota in limited_policy["quotas"]
+                ],
+            }
+            ledger = UsageLedger(ledger_path)
+            ledger.import_snapshot(snapshot, policy, now=now)
+            ledger.reserve(
+                policy, account_scope="my-project", input_tokens=100,
+                output_tokens=50, now=now,
             )
             env = {"PYTHONPATH": str(Path(__file__).resolve().parents[2])}
             denied = subprocess.run(
@@ -190,6 +206,25 @@ class ProviderPolicyTests(unittest.TestCase):
             catalog = root / "catalog.json"
             ledger_path = root / "usage.sqlite3"
             catalog.write_text(json.dumps({"schema_version": 1, "models": [self.policy]}), encoding="utf-8")
+            from workshop.providers.policy import ModelPolicy
+            from workshop.providers.usage_ledger import UsageLedger
+            policy = ModelPolicy.from_dict(self.policy)
+            now = time.time()
+            to_text = lambda value: datetime.fromtimestamp(value, timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            snapshot = {
+                "schema_version": 1, "snapshot_id": uuid.uuid4().hex,
+                "provider": "example", "model": "example-free-model",
+                "account_scope": "default", "source_type": "manual",
+                "source_url": "https://provider.example/dashboard",
+                "captured_at": to_text(now - 1),
+                "quotas": [
+                    {"metric": quota["metric"], "window_seconds": quota["window_seconds"],
+                     "scope": quota["scope"], "used": 0, "limit": quota["limit"],
+                     "reset_at": to_text(now - 1 + quota["window_seconds"])}
+                    for quota in self.policy["quotas"]
+                ],
+            }
+            UsageLedger(ledger_path).import_snapshot(snapshot, policy, now=now)
             env = {"PYTHONPATH": str(Path(__file__).resolve().parents[2])}
             result = subprocess.run(
                 [sys.executable, "-m", "workshop", "provider", "preflight", "example", "example-free-model",
@@ -199,9 +234,7 @@ class ProviderPolicyTests(unittest.TestCase):
             )
             self.assertIn("APPROVED", result.stdout)
             self.assertIn("Preflight does not reserve", result.stdout)
-            from workshop.providers.policy import ModelPolicy
-            from workshop.providers.usage_ledger import UsageLedger
-            usage = UsageLedger(ledger_path).usage(ModelPolicy.from_dict(self.policy), account_scope="default")
+            usage = UsageLedger(ledger_path).usage(policy, account_scope="default")
             self.assertEqual(next(item for item in usage if item.metric == "requests" and item.window_seconds == 60).used, 0)
 
     def test_cli_preflight_denies_without_a_verified_catalog(self) -> None:
