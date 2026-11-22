@@ -74,6 +74,7 @@ class UsageReservation:
 
 _COLUMNS = {
     "requests": "requests",
+    "tokens": "(input_tokens + output_tokens)",
     "input_tokens": "input_tokens",
     "output_tokens": "output_tokens",
     "neurons": "neurons",
@@ -304,7 +305,8 @@ class UsageLedger:
         require_reconciliation: bool,
     ) -> tuple[QuotaStatus, ...]:
         requested = {
-            "requests": requests, "input_tokens": input_tokens,
+            "requests": requests, "tokens": input_tokens + output_tokens,
+            "input_tokens": input_tokens,
             "output_tokens": output_tokens, "neurons": neurons,
         }
         result: list[QuotaStatus] = []
