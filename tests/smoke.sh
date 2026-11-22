@@ -15,8 +15,10 @@ scripts/check-words.sh tests/smoke.sh
 workshop/__init__.py workshop/__main__.py workshop/cli.py
 workshop/models.py workshop/task_store.py workshop/handoff.py workshop/context_manager.py
 workshop/providers/__init__.py workshop/providers/base.py workshop/providers/policy.py
+workshop/providers/usage_ledger.py workshop/providers/runner.py
 tests/unit/test_task_store.py tests/unit/test_context_manager.py
- tests/unit/test_task_checkpoints.py tests/unit/test_provider_policy.py
+tests/unit/test_task_checkpoints.py tests/unit/test_provider_policy.py
+tests/unit/test_provider_runner.py tests/unit/test_usage_ledger.py
 docs/ARCHITECTURE.md docs/NEW_PROJECT.md docs/PROVIDERS.md docs/ROADMAP.md docs/SECURITY.md docs/WORKFLOW.md"
 
 for path in $required; do

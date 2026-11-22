@@ -23,7 +23,10 @@ class ProviderResponse:
 
 
 class ChatProvider(Protocol):
-    """Contract implemented by optional providers; implementations must not bypass the gate."""
+    """Contract for optional adapters. Invoke only through `execute_with_free_tier_gate`.
+
+    Do not call this method directly from CLI or orchestration code.
+    """
 
     @property
     def provider_id(self) -> str: ...

@@ -44,14 +44,23 @@ cp config/provider-catalog.example.json config/provider-catalog.json
 # Inspect policies you have personally verified and added.
 python3 -m workshop provider list
 
-# Preflight a request; this never makes a network call.
+# Preflight a request; this checks local policy and quota but makes no reservation.
 python3 -m workshop provider preflight PROVIDER MODEL \
-  --input-tokens 1200 --output-tokens 400 --region MX
+  --input-tokens 1200 --output-tokens 400 --region MX \
+  --account-scope my-provider-project
+
+# Inspect local reservations.
+python3 -m workshop provider usage PROVIDER MODEL \
+  --account-scope my-provider-project
 ```
 
-The gate denies unknown, disabled, trial-only, unverified, expired, non-zero-priced, region-ineligible, or over-limit model policies. It validates that source and terms links use HTTPS, but it cannot independently prove that a link is official or that a provider's live account quota remains unused. A human must verify the cited official sources, and future adapters must add usage/quota accounting and call the gate before sending a request. Do not treat a preflight as an actual inference call or a provider-side spending cap.
+The gate denies unknown, disabled, trial-only, unverified, expired, non-zero-priced, region-ineligible, or over-limit model policies. It requires current official HTTPS pricing and terms sources, per-request token limits, and quota windows. `provider preflight` is read-only and does not reserve usage. Future adapters must use `execute_with_free_tier_gate` from `workshop/providers/runner.py`: it verifies the policy, atomically reserves quota in SQLite, and only then invokes the adapter.
 
-## Context bundles
+The local quota ledger uses `.workshop/provider-usage.sqlite3`. `--account-scope` is a non-secret label for the provider quota boundary (often an organization or project): use the same label for every credential that shares that provider quota, and a different label for a separate quota boundary. Do not put API keys in the label. Input token counts passed to the runner must conservatively include all system messages, project context, and user messages; this package does not estimate tokens automatically. Maximum output tokens are reserved. Neuron-metered requests are rejected unless the model policy contains a Neuron quota. Reservations are not refunded after ambiguous transport failures.
+
+The ledger counts only requests routed through this local installation and database. It does not see other machines, browser assistants, apps, or provider dashboard usage, and it does not fetch provider-side quota balances. The CLI preflight is a read-only snapshot and can become stale immediately; the runner's atomic reservation is the actual local gate. Check the provider dashboard and reconcile external usage before enabling a live adapter. This local ledger is not a guarantee against provider-side billing on its own.
+
+No live API adapters or approved model entries are included. The provider comparison and official sources are in `docs/PROVIDERS.md`.
 
 The context builder reads only `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/ARCHITECTURE.md`, and `docs/WORKFLOW.md`. It enforces per-file word limits and a total bundle budget, ignores unrelated files (including `.env`), and rejects symlinks that escape the project root.
 
@@ -75,7 +84,7 @@ GitHub Actions runs the checks with Python 3.10–3.13.
 ## Security and cost controls
 
 - Never commit API keys, tokens, passwords, private keys, or `.env` files.
-- Treat `.workshop/`, task descriptions, and generated handoffs as private project data.
+- Treat `.workshop/`, task descriptions, generated handoffs, and the local usage ledger as private project data.
 - Keep `config/provider-catalog.json` local. Do not add a model until official sources support every policy field.
 - No paid model use without explicit approval. The CLI and policy gate make no model requests.
 

@@ -34,6 +34,11 @@ class ProviderPolicyTests(unittest.TestCase):
             "output_cost_usd_per_million_tokens": 0,
             "max_input_tokens": 5000,
             "max_output_tokens": 1000,
+            "quotas": [
+                {"metric": "requests", "window_seconds": 60, "limit": 20, "scope": "account"},
+                {"metric": "requests", "window_seconds": 86400, "limit": 50, "scope": "account"},
+                {"metric": "input_tokens", "window_seconds": 60, "limit": 10000, "scope": "account"},
+            ],
         }
         self.today = date(2026, 11, 21)
 
@@ -123,6 +128,81 @@ class ProviderPolicyTests(unittest.TestCase):
         data = {**self.policy, "verified_at": "2026-11-21", "expires_at": "2026-11-20"}
         with self.assertRaisesRegex(ProviderCatalogError, "cannot precede"):
             ModelPolicy.from_dict(data)
+
+    def test_catalog_requires_quota_entries(self) -> None:
+        from workshop.providers.policy import ModelPolicy
+        data = {**self.policy, "quotas": []}
+        with self.assertRaisesRegex(ProviderCatalogError, "non-empty list"):
+            ModelPolicy.from_dict(data)
+
+    def test_catalog_rejects_invalid_or_duplicate_quota_entries(self) -> None:
+        from workshop.providers.policy import ModelPolicy
+        invalid = {**self.policy, "quotas": [{"metric": "requests", "window_seconds": 60, "limit": True, "scope": "account"}]}
+        with self.assertRaisesRegex(ProviderCatalogError, "positive integer"):
+            ModelPolicy.from_dict(invalid)
+        duplicated = {**self.policy, "quotas": [self.policy["quotas"][0], self.policy["quotas"][0]]}
+        with self.assertRaisesRegex(ProviderCatalogError, "Duplicate quota"):
+            ModelPolicy.from_dict(duplicated)
+
+    def test_cli_preflight_reads_local_usage_without_reserving(self) -> None:
+        from workshop.providers.policy import ModelPolicy
+        from workshop.providers.usage_ledger import UsageLedger
+
+        with tempfile.TemporaryDirectory() as work_dir:
+            root = Path(work_dir)
+            catalog = root / "catalog.json"
+            ledger_path = root / "usage.sqlite3"
+            limited_policy = {
+                **self.policy,
+                "quotas": [
+                    {"metric": "requests", "window_seconds": 60, "limit": 1, "scope": "account"},
+                    {"metric": "requests", "window_seconds": 86400, "limit": 1, "scope": "account"},
+                ],
+            }
+            catalog.write_text(json.dumps({"schema_version": 1, "models": [limited_policy]}), encoding="utf-8")
+            policy = ModelPolicy.from_dict(limited_policy)
+            UsageLedger(ledger_path).reserve(
+                policy,
+                account_scope="my-project",
+                input_tokens=100,
+                output_tokens=50,
+                now=__import__("time").time(),
+            )
+            env = {"PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+            denied = subprocess.run(
+                [sys.executable, "-m", "workshop", "provider", "preflight", "example", "example-free-model",
+                 "--input-tokens", "100", "--output-tokens", "50", "--region", "MX",
+                 "--account-scope", "my-project", "--catalog", str(catalog), "--ledger", str(ledger_path)],
+                capture_output=True, text=True, env={**os.environ, **env},
+            )
+            self.assertEqual(denied.returncode, 2)
+            self.assertIn("Quota exceeded", denied.stderr)
+            usage = subprocess.run(
+                [sys.executable, "-m", "workshop", "provider", "usage", "example", "example-free-model",
+                 "--account-scope", "my-project", "--catalog", str(catalog), "--ledger", str(ledger_path)],
+                check=True, capture_output=True, text=True, env={**os.environ, **env},
+            )
+            self.assertIn("1/1 used", usage.stdout)
+
+    def test_cli_preflight_does_not_reserve_a_request(self) -> None:
+        with tempfile.TemporaryDirectory() as work_dir:
+            root = Path(work_dir)
+            catalog = root / "catalog.json"
+            ledger_path = root / "usage.sqlite3"
+            catalog.write_text(json.dumps({"schema_version": 1, "models": [self.policy]}), encoding="utf-8")
+            env = {"PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+            result = subprocess.run(
+                [sys.executable, "-m", "workshop", "provider", "preflight", "example", "example-free-model",
+                 "--input-tokens", "100", "--output-tokens", "50", "--region", "MX",
+                 "--catalog", str(catalog), "--ledger", str(ledger_path)],
+                check=True, capture_output=True, text=True, env={**os.environ, **env},
+            )
+            self.assertIn("APPROVED", result.stdout)
+            self.assertIn("Preflight does not reserve", result.stdout)
+            from workshop.providers.policy import ModelPolicy
+            from workshop.providers.usage_ledger import UsageLedger
+            usage = UsageLedger(ledger_path).usage(ModelPolicy.from_dict(self.policy), account_scope="default")
+            self.assertEqual(next(item for item in usage if item.metric == "requests" and item.window_seconds == 60).used, 0)
 
     def test_cli_preflight_denies_without_a_verified_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as work_dir:
