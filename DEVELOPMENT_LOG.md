@@ -2,6 +2,10 @@
 
 Newest first, with ISO dates. Archive older entries after ~20 entries or 3,000 words.
 
+## 2026-11-22 (Groq quota header reconciliation)
+- **Change:** Added a saved-response-header converter for Groq daily request (RPD) and combined token-per-minute (TPM) counters. Added a combined tokens quota metric calculated as input plus reserved output tokens, a provider reconcile-groq-headers CLI command, documentation, and validation tests. The converter rejects credential headers, incomplete header groups, malformed resets, and limits that differ from the verified policy. It does not make a network request.
+- **Checks / result:** GitHub Actions run [44988911174](https://github.com/hapu/ai-workshop-template/actions/runs/44988911174) passed unit tests, word-budget checks, and repository smoke tests on Python 3.10, 3.11, 3.12, and 3.13. No provider adapter, model approval, credential, or inference request was added.
+- **Follow-up:** Reconcile any additional Groq dashboard limits and external usage before considering a live adapter; response headers do not expose every quota dimension.
 ## 2026-11-22 (external quota reconciliation)
 - **Change:** Added a validated external quota snapshot format and CLI import, a provider/API snapshot baseline in SQLite, freshness and reset-time enforcement for every configured quota window, and local-reservation roll-forward without double-counting. Added a converter for OpenRouter's official `GET /api/v1/key` free-model daily counter. Updated provider docs and safety rules. No live provider adapter or inference request was added.
 - **Checks / result:** Added tests for missing/stale/expired snapshots, limit mismatch, secret-field rejection, duplicate import, model/account scopes, roll-forward accounting, and OpenRouter daily-counter conversion. Hosted CI for this commit remains to be checked.

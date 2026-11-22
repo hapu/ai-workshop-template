@@ -58,7 +58,7 @@ The local policy gate does not make network calls. It also cannot prove that a c
 `workshop/providers/usage_ledger.py` maintains request reservations in `.workshop/provider-usage.sqlite3`:
 
 - SQLite transactions use `BEGIN IMMEDIATE` so concurrent local tasks cannot both reserve the last request slot.
-- Configured windows are checked before the reservation is inserted. Supported metrics are requests, input tokens, output tokens, and Neurons.
+- Configured windows are checked before the reservation is inserted. Supported metrics are requests, combined tokens, input tokens, output tokens, and Neurons. Combined tokens counts reserved input plus output tokens against one shared provider limit.
 - Account-scoped quotas aggregate that provider account across models; model-scoped quotas apply only to one model.
 - Every quota window must have a fresh imported external snapshot. The snapshot carries the provider's actual reset time, so the ledger does not guess the reset boundary.
 - Reservations are made before network I/O and are not refunded after a timeout or ambiguous failure, because the provider may have processed the request.
@@ -82,6 +82,30 @@ python3 -m workshop provider reconcile-openrouter-key /tmp/openrouter-key-status
 
 The converter imports `data.free_model_daily_requests` and calculates its reset at the next 00:00 UTC boundary. The endpoint does not expose every per-minute/model-provider rate limit, so those quotas still need their own dashboard or header snapshot. Do not save an API key or Authorization header in the response file. The converter does not make a network request itself.
 
+For Groq, save only the six documented rate-limit headers from a successful response as a JSON object (do not include Authorization, cookies, API keys, request bodies, or unrelated logs):
+
+```json
+{
+  "x-ratelimit-limit-requests": "1000",
+  "x-ratelimit-remaining-requests": "990",
+  "x-ratelimit-reset-requests": "23h59m59s",
+  "x-ratelimit-limit-tokens": "12000",
+  "x-ratelimit-remaining-tokens": "11800",
+  "x-ratelimit-reset-tokens": "52.4s"
+}
+```
+
+Import the captured headers with:
+
+```bash
+python3 -m workshop provider reconcile-groq-headers /tmp/groq-rate-limits.json \
+  --model "exact-groq-model-id" --account-scope groq-organization \
+  --captured-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
+
+The converter recognizes only account-scoped requests/86400 (RPD) and combined tokens/60 (TPM) policy windows, and it requires each header limit to match the catalog exactly. Reset durations are relative to --captured-at. The ledger counts conservative input-token estimates plus the reserved maximum output tokens against combined tokens. Groq also documents dashboard-only and other dimensions (including separate input/output token limits when configured); those are not inferred from these headers and must be independently reconciled when present in the model policy. The command reads a saved file only and makes no API request. See the official [Groq rate-limit documentation](https://console.groq.com/docs/rate-limits).
+Groq documents organization-level rate limits and also supports project-specific per-model overrides. The response headers do not identify the project, and this importer does not reconcile project overrides or separate ITPM/OTPM values. Do not use it as the sole quota evidence if project overrides or separate input/output limits are configured. In that case, keep the model disabled until every applicable organization and project quota can be represented and reconciled. See [Groq Projects](https://console.groq.com/docs/projects) for project rate-limit behavior.
+
 `provider preflight` is read-only: it checks whether one additional request currently fits but does not reserve it. A future adapter must use `execute_with_free_tier_gate` from `workshop/providers/runner.py`, which verifies the model policy, requires fresh snapshots, atomically reserves quota, and only then calls the adapter. Do not call an adapter's raw `complete` method directly. No live adapters are included yet.
 
 The ledger and imported snapshots are local to this machine and database file. They do not coordinate other devices or update provider-side quotas. Before enabling an adapter, reconcile every source of usage for that provider account, including external apps and devices, and make sure the local account-scope alias represents the same quota boundary.
@@ -90,4 +114,5 @@ The ledger and imported snapshots are local to this machine and database file. T
 
 | Date | Provider / model | What changed / official source |
 | :--- | :--- | :--- |
+| 2026-11-22 | Groq response headers | Added saved-header conversion for RPD and combined TPM; other account limits still require separate reconciliation. No model enabled. |
 | 2026-11-21 | Initial provider review | Added official-source assessment and exclusions/candidates above. No models approved for the local catalog. |

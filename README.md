@@ -82,6 +82,8 @@ python3 -m workshop provider reconcile-openrouter-key /tmp/openrouter-key-status
 
 OpenRouter's key endpoint provides the free-model daily request count, not every per-minute/model-provider quota. Other required windows still need their own current snapshot. Do not put the API key or Authorization header in the saved response file. See `docs/PROVIDERS.md` for provider-specific limits and the snapshot format.
 
+Groq response headers can be imported from a sanitized JSON map using `python3 -m workshop provider reconcile-groq-headers FILE --model MODEL --account-scope ORG_ALIAS --captured-at UTC_TIMESTAMP`. This imports only account-scoped requests/day and combined tokens/minute when the policy defines matching limits. The ledger counts input plus reserved output tokens for the combined token metric. It does not fetch headers itself; other documented Groq limits still require separate reconciliation. See `docs/PROVIDERS.md` for the exact format and caveats.
+
 No live API adapters or approved model entries are included. The provider comparison and official sources are in `docs/PROVIDERS.md`.
 
 The context builder reads only `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/ARCHITECTURE.md`, and `docs/WORKFLOW.md`. It enforces per-file word limits and a total bundle budget, ignores unrelated files (including `.env`), and rejects symlinks that escape the project root.
