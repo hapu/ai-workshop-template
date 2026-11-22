@@ -80,7 +80,8 @@ def _parser() -> argparse.ArgumentParser:
     preflight.add_argument("--output-tokens", type=int, required=True)
     preflight.add_argument("--region", required=True)
     preflight.add_argument("--neurons", type=int, default=0, help="conservative estimate for Neuron-metered services")
-    preflight.add_argument("--account-scope", default="default", help="local alias shared by all keys for one provider account")
+    preflight.add_argument("--account-scope", default="default", help="legacy local account alias")
+    preflight.add_argument("--quota-scope", action="append", default=[], metavar="TYPE=ALIAS", help="quota boundary alias; repeat for organization/project")
     preflight.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
     preflight.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
 
@@ -88,6 +89,7 @@ def _parser() -> argparse.ArgumentParser:
     usage.add_argument("provider")
     usage.add_argument("model")
     usage.add_argument("--account-scope", default="default")
+    usage.add_argument("--quota-scope", action="append", default=[], metavar="TYPE=ALIAS", help="quota boundary alias; repeat for organization/project")
     usage.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
     usage.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
 
@@ -225,6 +227,20 @@ def _run_context(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_quota_scopes(values: list[str]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for item in values:
+        if "=" not in item:
+            raise UsageLedgerError("Each --quota-scope must use TYPE=ALIAS")
+        scope, alias = item.split("=", 1)
+        if scope not in {"organization", "project"} or not alias.strip():
+            raise UsageLedgerError("Quota scopes must use organization or project with a non-empty alias")
+        if scope in result:
+            raise UsageLedgerError(f"Quota scope {scope} was supplied more than once")
+        result[scope] = alias.strip()
+    return result
+
+
 def _run_provider(args: argparse.Namespace) -> int:
     registry = ProviderRegistry.load(args.catalog)
     if args.provider_command == "reconcile":
@@ -302,18 +318,19 @@ def _run_provider(args: argparse.Namespace) -> int:
         print(f"DENIED: {exc}", file=sys.stderr)
         return 2
     ledger = UsageLedger(args.ledger)
+    quota_scopes = _parse_quota_scopes(args.quota_scope)
     if args.provider_command == "usage":
-        statuses = ledger.usage(policy, account_scope=args.account_scope)
+        statuses = ledger.usage(policy, account_scope=args.account_scope, quota_scopes=quota_scopes)
         print(f"Local usage for {policy.provider}/{policy.model} (account scope: {args.account_scope})")
         for item in statuses:
             if not item.reconciled:
                 print(
-                    f"{item.metric} / {item.window_seconds}s / {item.scope}: "
+                    f"{item.metric} / {item.window_seconds}s / {item.scope}={item.scope_id}: "
                     f"NOT RECONCILED; local-only reservations={item.local_used}"
                 )
                 continue
             print(
-                f"{item.metric} / {item.window_seconds}s / {item.scope}: "
+                f"{item.metric} / {item.window_seconds}s / {item.scope}={item.scope_id}: "
                 f"{item.used}/{item.limit} used "
                 f"(external snapshot={item.snapshot_used}, later local={item.local_used}); "
                 f"{item.remaining} remaining"
@@ -336,6 +353,7 @@ def _run_provider(args: argparse.Namespace) -> int:
         statuses = ledger.preflight(
             policy,
             account_scope=args.account_scope,
+            quota_scopes=quota_scopes,
             input_tokens=approval.input_tokens,
             output_tokens=approval.output_tokens,
             neurons=args.neurons,

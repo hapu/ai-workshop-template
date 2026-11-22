@@ -47,7 +47,7 @@ Initial research checked official provider documentation on **2026-11-21**. This
 - official HTTPS `source_url` and `terms_url` values (a human must verify source authenticity)
 - exact zero input and output token prices
 - explicit allowed region codes and maximum input/output tokens per request
-- one or more quota windows, each with a metric, positive limit, window in seconds, `account` or `model` scope, and maximum acceptable snapshot age (optional in the catalog; defaults to at most 300 seconds)
+- one or more quota windows, each with a metric, positive limit, window in seconds, `account`, `organization`, `project`, or `model` scope, and maximum acceptable snapshot age (optional in the catalog; defaults to at most 300 seconds)
 
 Unknown models, malformed policies, expired entries, non-zero prices, and requests outside listed region, token, or quota limits are denied. The empty example has no model entries, so all model requests are denied by default.
 
@@ -59,7 +59,7 @@ The local policy gate does not make network calls. It also cannot prove that a c
 
 - SQLite transactions use `BEGIN IMMEDIATE` so concurrent local tasks cannot both reserve the last request slot.
 - Configured windows are checked before the reservation is inserted. Supported metrics are requests, combined tokens, input tokens, output tokens, and Neurons. Combined tokens counts reserved input plus output tokens against one shared provider limit.
-- Account-scoped quotas aggregate that provider account across models; model-scoped quotas apply only to one model.
+- Account, organization, and project quotas aggregate across models for their independently supplied boundary alias; model-scoped quotas apply only to the exact model ID.
 - Every quota window must have a fresh imported external snapshot. The snapshot carries the provider's actual reset time, so the ledger does not guess the reset boundary.
 - Reservations are made before network I/O and are not refunded after a timeout or ambiguous failure, because the provider may have processed the request.
 - A snapshot establishes the provider-reported baseline. Local reservations created after its capture time are added, while earlier local events are assumed to be included in that baseline. This avoids double-counting, provided the snapshot accurately reflects provider usage at capture time.
@@ -116,3 +116,15 @@ The ledger and imported snapshots are local to this machine and database file. T
 | :--- | :--- | :--- |
 | 2026-11-22 | Groq response headers | Added saved-header conversion for RPD and combined TPM; other account limits still require separate reconciliation. No model enabled. |
 | 2026-11-21 | Initial provider review | Added official-source assessment and exclusions/candidates above. No models approved for the local catalog. |
+
+
+### Quota boundary v2
+
+Policies may define multiple quota entries across four boundary types:
+
+- `account`: legacy `--account-scope` alias, shared across models.
+- `organization`: explicit `--quota-scope organization=ORG_ALIAS`, shared across models in that organization.
+- `project`: explicit `--quota-scope project=PROJECT_ALIAS`, shared across models in that project.
+- `model`: exact model ID; no user-supplied alias is accepted.
+
+For generic snapshot entries, add `scope_id` to organization/project entries. It must match the local alias supplied at reservation time. Do not include credentials in aliases or snapshots. A missing alias or snapshot for any configured quota denies the entire request. Version-1 account/model snapshots remain supported.

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from .base import ChatProvider, Message, ProviderResponse
 from .policy import FreeTierGate, ProviderRegistry
@@ -28,6 +28,7 @@ def execute_with_free_tier_gate(
     region: str,
     neurons: int = 0,
     account_scope: str,
+    quota_scopes: Mapping[str, str] | None = None,
     request_id: str | None = None,
 ) -> ProviderCallResult:
     """Validate, reserve local quota, then call the provider adapter.
@@ -43,7 +44,7 @@ def execute_with_free_tier_gate(
     )
     policy = registry.require(provider_id, model)
     reservation = ledger.reserve(
-        policy, account_scope=account_scope,
+        policy, account_scope=account_scope, quota_scopes=quota_scopes,
         input_tokens=approval.input_tokens, output_tokens=approval.output_tokens,
         neurons=neurons, request_id=request_id,
     )

@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Mapping
 
 from .policy import ModelPolicy
 from .reconciliation import ExternalQuotaSnapshot, SnapshotError
@@ -48,6 +48,7 @@ class QuotaStatus:
     snapshot_source_type: str | None = None
     snapshot_source_url: str | None = None
     reconciled: bool = False
+    scope_id: str | None = None
 
     @property
     def remaining(self) -> int:
@@ -129,10 +130,31 @@ class UsageLedger:
                         PRIMARY KEY (snapshot_id, metric, window_seconds, scope)
                     )"""
                 )
+                columns = {row[1] for row in db.execute("PRAGMA table_info(external_quota_snapshots)")}
+                if "scope_id" not in columns:
+                    db.execute("ALTER TABLE external_quota_snapshots ADD COLUMN scope_id TEXT")
                 db.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_external_quota_lookup "
-                    "ON external_quota_snapshots(provider, account_scope, metric, scope, window_seconds, captured_at)"
+                    """UPDATE external_quota_snapshots
+                       SET scope_id = CASE WHEN scope = 'model' THEN COALESCE(model, account_scope)
+                                           ELSE account_scope END
+                       WHERE scope_id IS NULL"""
                 )
+                db.execute(
+                    """CREATE TABLE IF NOT EXISTS usage_event_scopes (
+                        request_id TEXT NOT NULL,
+                        scope TEXT NOT NULL,
+                        scope_id TEXT NOT NULL,
+                        PRIMARY KEY (request_id, scope)
+                    )"""
+                )
+                db.execute("""INSERT OR IGNORE INTO usage_event_scopes
+                              SELECT request_id, 'account', account_scope FROM usage_events""")
+                db.execute("""INSERT OR IGNORE INTO usage_event_scopes
+                              SELECT request_id, 'model', model FROM usage_events""")
+                db.execute("CREATE INDEX IF NOT EXISTS idx_usage_event_scope_lookup ON usage_event_scopes(scope, scope_id, request_id)")
+                db.execute("DROP INDEX IF EXISTS idx_external_quota_lookup")
+                db.execute("CREATE INDEX idx_external_quota_lookup ON external_quota_snapshots(provider, scope, scope_id, metric, window_seconds, captured_at)")
+                db.execute("PRAGMA user_version = 2")
             try:
                 os.chmod(self.path, 0o600)
             except OSError:
@@ -161,13 +183,13 @@ class UsageLedger:
                     model_value = snapshot.model if quota.scope == "model" else None
                     db.execute(
                         """INSERT INTO external_quota_snapshots (
-                            snapshot_id, provider, model, account_scope, metric, scope,
+                            snapshot_id, provider, model, account_scope, metric, scope, scope_id,
                             window_seconds, used, limit_value, captured_at, reset_at,
                             source_type, source_url
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             snapshot.snapshot_id, snapshot.provider, model_value,
-                            snapshot.account_scope, quota.metric, quota.scope,
+                            snapshot.account_scope, quota.metric, quota.scope, quota.scope_id,
                             quota.window_seconds, quota.used, quota.limit,
                             snapshot.captured_at, quota.reset_at,
                             snapshot.source_type, snapshot.source_url,
@@ -187,6 +209,7 @@ class UsageLedger:
         policy: ModelPolicy,
         *,
         account_scope: str,
+        quota_scopes: Mapping[str, str] | None = None,
         input_tokens: int = 0,
         output_tokens: int = 0,
         neurons: int = 0,
@@ -200,7 +223,7 @@ class UsageLedger:
         try:
             with self._connection() as db:
                 return self._status(
-                    db, policy, account_scope, input_tokens, output_tokens, neurons,
+                    db, policy, account_scope, quota_scopes, input_tokens, output_tokens, neurons,
                     int(include_request), timestamp, require_reconciliation=True,
                 )
         except UsageLedgerError:
@@ -213,6 +236,7 @@ class UsageLedger:
         policy: ModelPolicy,
         *,
         account_scope: str,
+        quota_scopes: Mapping[str, str] | None = None,
         input_tokens: int,
         output_tokens: int,
         neurons: int = 0,
@@ -220,7 +244,7 @@ class UsageLedger:
     ) -> tuple[QuotaStatus, ...]:
         """Check if one additional request fits without reserving it."""
         statuses = self.check(
-            policy, account_scope=account_scope, input_tokens=input_tokens,
+            policy, account_scope=account_scope, quota_scopes=quota_scopes, input_tokens=input_tokens,
             output_tokens=output_tokens, neurons=neurons, include_request=True, now=now,
         )
         self._raise_if_exceeded(statuses)
@@ -231,6 +255,7 @@ class UsageLedger:
         policy: ModelPolicy,
         *,
         account_scope: str,
+        quota_scopes: Mapping[str, str] | None = None,
         input_tokens: int,
         output_tokens: int,
         neurons: int = 0,
@@ -251,10 +276,11 @@ class UsageLedger:
                 db.execute("BEGIN IMMEDIATE")
                 # Policy windows are capped at one year; older rows are irrelevant.
                 db.execute("DELETE FROM usage_events WHERE reserved_at < ?", (timestamp - 365 * 86400,))
+                db.execute("DELETE FROM usage_event_scopes WHERE request_id NOT IN (SELECT request_id FROM usage_events)")
                 if db.execute("SELECT 1 FROM usage_events WHERE request_id = ?", (rid,)).fetchone():
                     raise UsageLedgerError("This request_id already has a quota reservation; do not send twice")
                 statuses = self._status(
-                    db, policy, account_scope, input_tokens, output_tokens, neurons,
+                    db, policy, account_scope, quota_scopes, input_tokens, output_tokens, neurons,
                     1, timestamp, require_reconciliation=True,
                 )
                 self._raise_if_exceeded(statuses)
@@ -266,6 +292,11 @@ class UsageLedger:
                     (rid, policy.provider, policy.model, account_scope.strip(), timestamp,
                      input_tokens, output_tokens, neurons),
                 )
+                for scope, scope_id in self._resolve_scope_bindings(policy, account_scope, quota_scopes).items():
+                    db.execute(
+                        "INSERT INTO usage_event_scopes(request_id, scope, scope_id) VALUES (?, ?, ?)",
+                        (rid, scope, scope_id),
+                    )
                 db.commit()
         except UsageLedgerError:
             raise
@@ -277,7 +308,8 @@ class UsageLedger:
         )
 
     def usage(
-        self, policy: ModelPolicy, *, account_scope: str, now: float | None = None
+        self, policy: ModelPolicy, *, account_scope: str,
+        quota_scopes: Mapping[str, str] | None = None, now: float | None = None
     ) -> tuple[QuotaStatus, ...]:
         """Show usage; missing or stale snapshots are reported, not treated as zero."""
         self._validate(account_scope, 0, 0, 0)
@@ -285,7 +317,7 @@ class UsageLedger:
         try:
             with self._connection() as db:
                 return self._status(
-                    db, policy, account_scope, 0, 0, 0, 0, timestamp,
+                    db, policy, account_scope, quota_scopes, 0, 0, 0, 0, timestamp,
                     require_reconciliation=False,
                 )
         except (sqlite3.Error, OSError) as exc:
@@ -296,6 +328,7 @@ class UsageLedger:
         db: sqlite3.Connection,
         policy: ModelPolicy,
         account_scope: str,
+        quota_scopes: Mapping[str, str] | None,
         input_tokens: int,
         output_tokens: int,
         neurons: int,
@@ -306,39 +339,20 @@ class UsageLedger:
     ) -> tuple[QuotaStatus, ...]:
         requested = {
             "requests": requests, "tokens": input_tokens + output_tokens,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens, "neurons": neurons,
+            "input_tokens": input_tokens, "output_tokens": output_tokens, "neurons": neurons,
         }
+        bindings = self._resolve_scope_bindings(policy, account_scope, quota_scopes)
         result: list[QuotaStatus] = []
         for quota in policy.quotas:
             column = _COLUMNS[quota.metric]
-            if quota.scope == "account":
-                model_clause = "model IS NULL"
-                snapshot_params: tuple[object, ...] = (
-                    policy.provider, account_scope.strip(), quota.metric, quota.window_seconds,
-                )
-                event_model_clause = ""
-                event_params: tuple[object, ...] = (
-                    policy.provider, account_scope.strip(),
-                )
-            else:
-                model_clause = "model = ?"
-                snapshot_params = (
-                    policy.provider, account_scope.strip(), quota.metric,
-                    quota.window_seconds,
-                )
-                event_model_clause = " AND model = ?"
-                event_params = (policy.provider, account_scope.strip(), policy.model)
-
+            scope_id = bindings[quota.scope]
             snap = db.execute(
-                f"""SELECT used, limit_value, captured_at, reset_at, source_type, source_url
-                    FROM external_quota_snapshots
-                    WHERE provider = ? AND account_scope = ? AND metric = ?
-                      AND window_seconds = ? AND scope = ? AND {model_clause}
-                      AND captured_at <= ?
-                    ORDER BY captured_at DESC LIMIT 1""",
-                snapshot_params + (quota.scope,)
-                + ((policy.model,) if quota.scope == "model" else ()) + (now,),
+                """SELECT used, limit_value, captured_at, reset_at, source_type, source_url
+                   FROM external_quota_snapshots
+                   WHERE provider = ? AND scope = ? AND scope_id = ?
+                     AND metric = ? AND window_seconds = ? AND captured_at <= ?
+                   ORDER BY captured_at DESC LIMIT 1""",
+                (policy.provider, quota.scope, scope_id, quota.metric, quota.window_seconds, now),
             ).fetchone()
 
             if snap is None:
@@ -349,16 +363,16 @@ class UsageLedger:
                     )
                 local_start = now - quota.window_seconds
                 row = db.execute(
-                    f"SELECT COALESCE(SUM({column}), 0) FROM usage_events "
-                    f"WHERE provider = ? AND account_scope = ? AND reserved_at >= ? AND reserved_at <= ?"
-                    + event_model_clause,
-                    (policy.provider, account_scope.strip(), local_start, now)
-                    + ((policy.model,) if quota.scope == "model" else ()),
+                    f"""SELECT COALESCE(SUM({column}), 0)
+                        FROM usage_events e JOIN usage_event_scopes s ON s.request_id = e.request_id
+                        WHERE e.provider = ? AND s.scope = ? AND s.scope_id = ?
+                          AND e.reserved_at >= ? AND e.reserved_at <= ?""",
+                    (policy.provider, quota.scope, scope_id, local_start, now),
                 ).fetchone()
                 result.append(QuotaStatus(
                     quota.metric, quota.scope, quota.window_seconds, quota.limit,
                     None, requested[quota.metric], None, int(row[0] if row else 0),
-                    reconciled=False,
+                    reconciled=False, scope_id=scope_id,
                 ))
                 continue
 
@@ -378,7 +392,7 @@ class UsageLedger:
                     None, requested[quota.metric], int(used_external), 0,
                     datetime.fromtimestamp(float(captured_at), timezone.utc).isoformat(),
                     datetime.fromtimestamp(float(reset_at), timezone.utc).isoformat(),
-                    age, source_type, source_url, False,
+                    age, source_type, source_url, False, scope_id,
                 ))
                 continue
             if age > quota.snapshot_max_age_seconds:
@@ -396,15 +410,12 @@ class UsageLedger:
                 ))
                 continue
 
-            local_query = (
-                f"SELECT COALESCE(SUM({column}), 0) FROM usage_events "
-                "WHERE provider = ? AND account_scope = ? AND reserved_at > ? "
-                "AND reserved_at <= ? AND reserved_at < ?" + event_model_clause
-            )
             local_row = db.execute(
-                local_query,
-                (policy.provider, account_scope.strip(), float(captured_at), now, float(reset_at))
-                + ((policy.model,) if quota.scope == "model" else ()),
+                f"""SELECT COALESCE(SUM({column}), 0)
+                    FROM usage_events e JOIN usage_event_scopes s ON s.request_id = e.request_id
+                    WHERE e.provider = ? AND s.scope = ? AND s.scope_id = ?
+                      AND e.reserved_at > ? AND e.reserved_at <= ? AND e.reserved_at < ?""",
+                (policy.provider, quota.scope, scope_id, float(captured_at), now, float(reset_at)),
             ).fetchone()
             local_used = int(local_row[0] if local_row else 0)
             total_used = int(used_external) + local_used
@@ -413,9 +424,34 @@ class UsageLedger:
                 total_used, requested[quota.metric], int(used_external), local_used,
                 datetime.fromtimestamp(float(captured_at), timezone.utc).isoformat(),
                 datetime.fromtimestamp(float(reset_at), timezone.utc).isoformat(),
-                age, source_type, source_url, True,
+                age, source_type, source_url, True, scope_id,
             ))
         return tuple(result)
+
+    @staticmethod
+    def _resolve_scope_bindings(
+        policy: ModelPolicy,
+        account_scope: str,
+        quota_scopes: Mapping[str, str] | None,
+    ) -> dict[str, str]:
+        supplied = dict(quota_scopes or {})
+        allowed = {"organization", "project"}
+        if any(not isinstance(key, str) or key not in allowed for key in supplied):
+            raise UsageLedgerError("quota_scopes accepts only organization and project aliases")
+        result: dict[str, str] = {
+            "account": account_scope.strip(),
+            "model": policy.model,
+        }
+        for scope, value in supplied.items():
+            if not isinstance(value, str) or not value.strip() or len(value.strip()) > 120:
+                raise UsageLedgerError(f"{scope} quota scope alias must be a non-empty string up to 120 characters")
+            result[scope] = value.strip()
+        for scope in {quota.scope for quota in policy.quotas}:
+            if scope in {"organization", "project"} and scope not in result:
+                raise ReconciliationRequired(
+                    f"Missing {scope} quota scope binding; provide a non-secret alias before making requests"
+                )
+        return result
 
     @staticmethod
     def _raise_if_exceeded(statuses: tuple[QuotaStatus, ...]) -> None:
