@@ -13,7 +13,10 @@ from .context_manager import ContextError, ContextManager
 from .handoff import render_handoff
 from .models import TASK_STATUSES, Task
 from .providers.policy import FreeTierGate, PolicyDenied, ProviderCatalogError, ProviderRegistry
-from .providers.reconciliation import openrouter_key_response_to_snapshot
+from .providers.reconciliation import (
+    groq_response_headers_to_snapshot,
+    openrouter_key_response_to_snapshot,
+)
 from .providers.usage_ledger import QuotaExceeded, UsageLedger, UsageLedgerError
 from .task_store import TaskStore, TaskStoreError
 
@@ -104,6 +107,18 @@ def _parser() -> argparse.ArgumentParser:
     openrouter.add_argument("--snapshot-id", default=None)
     openrouter.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
     openrouter.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
+
+    groq = provider_commands.add_parser(
+        "reconcile-groq-headers",
+        help="convert saved Groq response rate-limit headers into quota snapshots",
+    )
+    groq.add_argument("headers_file", type=Path)
+    groq.add_argument("--model", required=True)
+    groq.add_argument("--account-scope", required=True, help="non-secret alias for the Groq organization quota")
+    groq.add_argument("--captured-at", required=True, help="UTC ISO-8601 time when the response headers were received")
+    groq.add_argument("--snapshot-id", default=None)
+    groq.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
+    groq.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
 
     commands.add_parser("doctor", help="check the local Python and workspace environment")
     return parser
@@ -246,6 +261,27 @@ def _run_provider(args: argparse.Namespace) -> int:
         print(f"Model: {snapshot.model}; account scope: {snapshot.account_scope}")
         print(f"Captured at: {snapshot.captured_at_text()}")
         print("Only the OpenRouter free-model daily request counter was imported.")
+        print("No API request was made by this command.")
+        return 0
+
+    if args.provider_command == "reconcile-groq-headers":
+        try:
+            headers = json.loads(args.headers_file.read_text(encoding="utf-8"))
+            policy = registry.require("groq", args.model)
+            canonical = groq_response_headers_to_snapshot(
+                headers, policy, account_scope=args.account_scope,
+                captured_at=args.captured_at, snapshot_id=args.snapshot_id or uuid.uuid4().hex,
+            )
+            snapshot = UsageLedger(args.ledger).import_snapshot(canonical, policy)
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError, UsageLedgerError, PolicyDenied) as exc:
+            print(f"RECONCILIATION REJECTED: {exc}", file=sys.stderr)
+            return 2
+        print(f"Imported Groq response-header snapshot: {snapshot.snapshot_id}")
+        print(f"Model: {snapshot.model}; account scope: {snapshot.account_scope}")
+        print(f"Captured at: {snapshot.captured_at_text()}")
+        print("Imported quota dimensions: " + ", ".join(
+            f"{item.metric}/{item.window_seconds}s" for item in snapshot.quotas
+        ))
         print("No API request was made by this command.")
         return 0
 
