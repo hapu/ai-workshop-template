@@ -2,6 +2,13 @@
 
 One entry per important decision, newest first. Supersede decisions instead of deleting them.
 
+## 2026-11-22: Classify OpenRouter rate-limit errors without retrying
+- **Status:** accepted
+- **Decision:** Parse only documented error metadata and bounded rate-limit headers from HTTP failures. Expose limit source, upstream provider code, Retry-After, and OpenRouter rate-limit counters as safe diagnostics. Never automatically retry, switch provider, or switch model.
+- **Why:** OpenRouter distinguishes its shared free-model cap from upstream provider capacity. Automatic retries can consume daily free quota, repeat ambiguous requests, or undermine the zero-spend policy.
+- **Consequences:** Reservations remain charged locally after failed/ambiguous requests. Retry timing is informational only and requires a deliberate new user action.
+
+
 ## 2026-11-22: Add OpenRouter adapter without enabling a model
 - **Status:** accepted
 - **Decision:** Add a standard-library OpenRouter Chat Completions adapter behind the existing policy gate and usage ledger. Pin each request to the exact catalog model, disable provider-level fallback, disable retries, and keep the tracked model catalog empty.
