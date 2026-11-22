@@ -96,7 +96,9 @@ def parse_openrouter_key_status(payload: dict[str, Any]) -> OpenRouterKeyStatus:
             raise OpenRouterStatusError(f"{field} must be a finite number or null")
         return float(value)
 
-    credit_remaining = amount(data.get("limit_remaining"), "limit_remaining")
+    if "limit_remaining" not in data:
+        raise OpenRouterStatusError("OpenRouter response is missing limit_remaining")
+    credit_remaining = amount(data["limit_remaining"], "limit_remaining")
     budgets = data.get("budgets")
     if not isinstance(budgets, list):
         raise OpenRouterStatusError("OpenRouter response budgets must be an array")
@@ -104,12 +106,16 @@ def parse_openrouter_key_status(payload: dict[str, Any]) -> OpenRouterKeyStatus:
         if not isinstance(budget, dict) or not isinstance(budget.get("scope"), str):
             raise OpenRouterStatusError(f"OpenRouter budget {index} is malformed")
         for field in ("limit_usd", "spend_usd", "remaining_usd"):
-            amount(budget.get(field), f"budgets[{index}].{field}")
+            if field not in budget:
+                raise OpenRouterStatusError(f"OpenRouter budget {index} is missing {field}")
+            amount(budget[field], f"budgets[{index}].{field}")
     effective = data.get("effective_budget")
     if effective is not None:
         if not isinstance(effective, dict) or not isinstance(effective.get("scope"), str):
             raise OpenRouterStatusError("OpenRouter effective_budget is malformed")
-        effective_remaining = amount(effective.get("remaining_usd"), "effective_budget.remaining_usd")
+        if "remaining_usd" not in effective:
+            raise OpenRouterStatusError("OpenRouter effective_budget is missing remaining_usd")
+        effective_remaining = amount(effective["remaining_usd"], "effective_budget.remaining_usd")
     else:
         effective_remaining = None
 
