@@ -3,9 +3,11 @@
 Instructions for AI coding agents. Keep under 500 words.
 
 ## Environment & Commands
-- **Host:** fill in OS, RAM/CPU, and available storage; keep commands light.
-- **Stack:** Python 3.10+ standard library for the starter CLI; add and pin dependencies only when justified.
+- **Host:** low-power Chromebook; record its OS, RAM/CPU, and available storage.
+- **Stack:** Python 3.10+ standard library for the starter CLI; add dependencies only when justified.
 - **Run:** `python3 -m workshop --help` or `python3 -m workshop doctor`.
+- **Task state:** `python3 -m workshop task resume TASK_ID`.
+- **Context:** `python3 -m workshop context build --project . --output .workshop/context.md`.
 - **Test:** `python3 -m unittest discover -s tests/unit -v` and `bash scripts/check-words.sh && bash tests/smoke.sh`.
 
 ## Before changing anything

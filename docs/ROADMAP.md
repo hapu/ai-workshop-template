@@ -1,6 +1,6 @@
 # Roadmap
 
-The master template is being upgraded incrementally. A checked box means the behavior exists and has been verified; planned work must remain visibly unchecked.
+The master template is upgraded incrementally. A checked box means the behavior exists and has been verified; planned work remains unchecked.
 
 ## Phase 1: Repository foundation
 - [x] Resolve the README/license mismatch by documenting the existing GPL-3.0 license.
@@ -11,10 +11,13 @@ The master template is being upgraded incrementally. A checked box means the beh
 - [x] Add continuous integration for supported Python versions.
 
 ## Phase 2: Reliable task and context management
-- [ ] Add task dependencies, checkpoints, and resumable workflow state.
-- [ ] Add structured project context loading with size limits.
-- [ ] Add safe import/export for task bundles.
-- [ ] Add recovery tests for interrupted writes and malformed state.
+- [x] Add resumable checkpoints to task records with backward-compatible loading.
+- [x] Add task resume and checkpoint CLI commands.
+- [x] Add allowlisted context loading with per-file and aggregate word limits.
+- [x] Reject context symlinks that resolve outside the project root.
+- [x] Include checkpoint state in generated handoffs.
+- [ ] Add safe task bundle import/export.
+- [ ] Add stronger interrupted-write and recovery tests.
 
 ## Phase 3: Provider adapters and routing
 - [ ] Define a common provider request/response interface.
@@ -24,7 +27,7 @@ The master template is being upgraded incrementally. A checked box means the beh
 - [ ] Verify model availability and quotas from official sources; record dates.
 
 ## Phase 4: Browser assistant interoperability
-- [ ] Standardize browser-ready handoff prompts.
+- [ ] Standardize browser-ready handoff prompts and bounded context packaging.
 - [ ] Import assistant responses and proposed file changes safely.
 - [ ] Preserve context and provenance between API and browser sessions.
 - [ ] Add manual fallback instructions when API quotas are exhausted.

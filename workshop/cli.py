@@ -1,4 +1,4 @@
-"""Command-line interface for local workshop task management."""
+"""Command-line interface for local workshop task and context management."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .context_manager import ContextError, ContextManager
 from .handoff import render_handoff
 from .models import TASK_STATUSES, Task
 from .task_store import TaskStore, TaskStoreError
@@ -17,40 +18,50 @@ def _parser() -> argparse.ArgumentParser:
         prog="workshop",
         description="Lightweight task and handoff manager for the AI Workshop.",
     )
-    parser.add_argument(
-        "--home",
-        default=".workshop",
-        help="directory for local task data (default: .workshop)",
-    )
+    parser.add_argument("--home", default=".workshop", help="local task data directory (default: .workshop)")
     parser.add_argument("--version", action="version", version=f"workshop {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
 
     task = commands.add_parser("task", help="create and manage tasks")
     task_commands = task.add_subparsers(dest="task_command", required=True)
-
     create = task_commands.add_parser("create", help="create a task")
-    create.add_argument("title", help="short task title")
-    create.add_argument("--description", default="", help="task objective and acceptance criteria")
-    create.add_argument("--project", default=".", help="project directory (default: current directory)")
-
+    create.add_argument("title")
+    create.add_argument("--description", default="")
+    create.add_argument("--project", default=".")
     task_commands.add_parser("list", help="list saved tasks")
-
     show = task_commands.add_parser("show", help="show a task")
     show.add_argument("task_id")
-
     status = task_commands.add_parser("status", help="change a task status")
     status.add_argument("task_id")
     status.add_argument("status", choices=sorted(TASK_STATUSES))
-
     note = task_commands.add_parser("note", help="append a note to a task")
     note.add_argument("task_id")
-    note.add_argument("text", help="note text")
-
+    note.add_argument("text")
     handoff = task_commands.add_parser("handoff", help="render a portable assistant handoff")
     handoff.add_argument("task_id")
-    handoff.add_argument("--output", type=Path, help="write Markdown to this file instead of stdout")
+    handoff.add_argument("--output", type=Path)
+    resume = task_commands.add_parser("resume", help="show saved state and remaining checkpoints")
+    resume.add_argument("task_id")
 
-    commands.add_parser("doctor", help="check the local Python and workspace environment")
+    checkpoint = task_commands.add_parser("checkpoint", help="manage task checkpoints")
+    checkpoint_commands = checkpoint.add_subparsers(dest="checkpoint_command", required=True)
+    cp_add = checkpoint_commands.add_parser("add", help="add a pending checkpoint")
+    cp_add.add_argument("task_id")
+    cp_add.add_argument("title")
+    cp_list = checkpoint_commands.add_parser("list", help="list checkpoints")
+    cp_list.add_argument("task_id")
+    cp_done = checkpoint_commands.add_parser("complete", help="mark a checkpoint complete")
+    cp_done.add_argument("task_id")
+    cp_done.add_argument("checkpoint_id")
+
+    context = commands.add_parser("context", help="build a bounded project-context bundle")
+    context_commands = context.add_subparsers(dest="context_command", required=True)
+    build = context_commands.add_parser("build", help="load known context files in priority order")
+    build.add_argument("--project", default=".")
+    build.add_argument("--max-words", type=int, default=2500)
+    build.add_argument("--output", type=Path)
+
+    commands.add_parser("doctor", help="check local Python and workspace environment")
     return parser
 
 
@@ -65,6 +76,11 @@ def _print_task(task: Task) -> None:
         print(f"Description: {task.description}")
     for note in task.notes:
         print(f"Note:        {note}")
+    if task.checkpoints:
+        print("Checkpoints:")
+        for item in task.checkpoints:
+            marker = "x" if item.status == "done" else " "
+            print(f"  [{marker}] {item.id} {item.title}")
 
 
 def _run_task(args: argparse.Namespace, store: TaskStore) -> int:
@@ -79,19 +95,19 @@ def _run_task(args: argparse.Namespace, store: TaskStore) -> int:
             print("No tasks found.")
             return 0
         print(f"{'ID':<10} {'STATUS':<12} TITLE")
-        for task in tasks:
-            print(f"{task.id:<10} {task.status:<12} {task.title}")
+        for item in tasks:
+            print(f"{item.id:<10} {item.status:<12} {item.title}")
         return 0
     if args.task_command == "show":
         _print_task(store.get(args.task_id))
         return 0
     if args.task_command == "status":
-        task = store.set_status(args.task_id, args.status)
-        print(f"Updated {task.id}: {task.status}")
+        item = store.set_status(args.task_id, args.status)
+        print(f"Updated {item.id}: {item.status}")
         return 0
     if args.task_command == "note":
-        task = store.add_note(args.task_id, args.text)
-        print(f"Added note to {task.id}")
+        item = store.add_note(args.task_id, args.text)
+        print(f"Added note to {item.id}")
         return 0
     if args.task_command == "handoff":
         markdown = render_handoff(store.get(args.task_id))
@@ -102,7 +118,52 @@ def _run_task(args: argparse.Namespace, store: TaskStore) -> int:
         else:
             sys.stdout.write(markdown)
         return 0
+    if args.task_command == "resume":
+        item = store.get(args.task_id)
+        _print_task(item)
+        pending = [checkpoint for checkpoint in item.checkpoints if checkpoint.status != "done"]
+        print(f"Resume summary: {len(pending)} pending / {len(item.checkpoints)} total checkpoints")
+        if pending:
+            print("Next suggested step:", pending[0].title)
+        else:
+            print("No pending checkpoints. Review the task status and notes before continuing.")
+        return 0
+    if args.task_command == "checkpoint":
+        if args.checkpoint_command == "add":
+            item = store.add_checkpoint(args.task_id, args.title)
+            checkpoint = item.checkpoints[-1]
+            print(f"Added checkpoint {checkpoint.id}: {checkpoint.title}")
+            return 0
+        if args.checkpoint_command == "list":
+            item = store.get(args.task_id)
+            if not item.checkpoints:
+                print("No checkpoints found.")
+                return 0
+            for checkpoint in item.checkpoints:
+                marker = "x" if checkpoint.status == "done" else " "
+                print(f"[{marker}] {checkpoint.id} {checkpoint.title}")
+            return 0
+        if args.checkpoint_command == "complete":
+            item = store.complete_checkpoint(args.task_id, args.checkpoint_id)
+            print(f"Completed checkpoint {args.checkpoint_id} for task {item.id}")
+            return 0
     return 2
+
+
+def _run_context(args: argparse.Namespace) -> int:
+    bundle = ContextManager(args.project, args.max_words).build()
+    markdown = bundle.render()
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(markdown, encoding="utf-8")
+        print(f"Wrote context bundle: {args.output} ({bundle.total_words}/{bundle.max_words} words)")
+    else:
+        sys.stdout.write(markdown)
+        print(
+            f"Loaded {len(bundle.files)} context files ({bundle.total_words}/{bundle.max_words} words).",
+            file=sys.stderr,
+        )
+    return 0
 
 
 def _doctor(home: str) -> int:
@@ -122,18 +183,19 @@ def _doctor(home: str) -> int:
         print(f"FAIL: workspace is not writable: {exc}")
         return 1
     print(f"OK: workspace is writable: {directory}")
-    print("OK: no API request was made; no provider credentials are required for local task commands.")
+    print("OK: no API request was made; no provider credentials are required for local commands.")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = _parser()
-    args = parser.parse_args(argv)
+    args = _parser().parse_args(argv)
     try:
         if args.command == "doctor":
             return _doctor(args.home)
+        if args.command == "context":
+            return _run_context(args)
         return _run_task(args, TaskStore(args.home))
-    except TaskStoreError as exc:
+    except (TaskStoreError, ContextError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     except OSError as exc:

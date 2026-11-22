@@ -8,35 +8,17 @@ fail=0
 ok() { echo "ok    $1"; }
 bad() { echo "FAIL  $1"; fail=1; }
 
-required=(
-  README.md
-  WORKSHOP.md
-  AGENTS.md
-  PROJECT_CONTEXT.md
-  HANDOFF.md
-  TODO.md
-  DECISIONS.md
-  DEVELOPMENT_LOG.md
-  LICENSE
-  docs/ARCHITECTURE.md
-  docs/NEW_PROJECT.md
-  docs/PROVIDERS.md
-  docs/ROADMAP.md
-  docs/SECURITY.md
-  docs/WORKFLOW.md
-  config/examples/env.example
-  scripts/check-words.sh
-  tests/smoke.sh
-  workshop/__init__.py
-  workshop/__main__.py
-  workshop/cli.py
-  workshop/models.py
-  workshop/task_store.py
-  workshop/handoff.py
-  tests/unit/test_task_store.py
-)
+required="README.md WORKSHOP.md AGENTS.md PROJECT_CONTEXT.md HANDOFF.md TODO.md
+DECISIONS.md DEVELOPMENT_LOG.md LICENSE
+docs/ARCHITECTURE.md docs/NEW_PROJECT.md docs/PROVIDERS.md
+docs/ROADMAP.md docs/SECURITY.md docs/WORKFLOW.md
+config/examples/env.example scripts/check-words.sh tests/smoke.sh
+workshop/__init__.py workshop/__main__.py workshop/cli.py
+workshop/models.py workshop/task_store.py workshop/handoff.py
+workshop/context_manager.py tests/unit/test_task_store.py
+tests/unit/test_context_manager.py tests/unit/test_task_checkpoints.py"
 
-for path in "${required[@]}"; do
+for path in $required; do
   if [ -s "$path" ]; then ok "$path"; else bad "$path (missing or empty)"; fi
 done
 
@@ -65,7 +47,7 @@ import re
 import sys
 
 files = [Path("README.md"), Path("WORKSHOP.md"), Path("AGENTS.md"), *Path("docs").glob("*.md")]
-bad = []
+errors = []
 for path in files:
     if not path.is_file():
         continue
@@ -75,10 +57,10 @@ for path in files:
         if not target or target.startswith(("http://", "https://", "mailto:", "#")):
             continue
         if not (path.parent / target).resolve().exists():
-            bad.append(f"{path}: {target}")
-if bad:
+            errors.append(f"{path}: {target}")
+if errors:
     print("FAIL  local Markdown links:")
-    print("\n".join(bad))
+    print("\n".join(errors))
     sys.exit(1)
 print("ok    local Markdown links")
 PY

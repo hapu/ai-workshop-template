@@ -7,7 +7,7 @@ import re
 import uuid
 from pathlib import Path
 
-from .models import TASK_STATUSES, Task, utc_now
+from .models import TASK_STATUSES, Checkpoint, Task, utc_now
 
 _TASK_ID = re.compile(r"^[a-f0-9]{8}$")
 
@@ -55,10 +55,7 @@ class TaskStore:
     def list(self) -> list[Task]:
         if not self.tasks_dir.exists():
             return []
-        tasks: list[Task] = []
-        for path in sorted(self.tasks_dir.glob("*.json"), reverse=True):
-            task = self.get(path.stem)
-            tasks.append(task)
+        tasks = [self.get(path.stem) for path in self.tasks_dir.glob("*.json")]
         return sorted(tasks, key=lambda item: item.updated_at, reverse=True)
 
     def set_status(self, task_id: str, status: str) -> Task:
@@ -77,6 +74,42 @@ class TaskStore:
             raise TaskStoreError("Note cannot be empty")
         task = self.get(task_id)
         task.notes.append(clean_note)
+        task.updated_at = utc_now()
+        self._write(task)
+        return task
+
+    def add_checkpoint(self, task_id: str, title: str) -> Task:
+        clean_title = title.strip()
+        if not clean_title:
+            raise TaskStoreError("Checkpoint title cannot be empty")
+        task = self.get(task_id)
+        existing_ids = {item.id for item in task.checkpoints}
+        checkpoint_id = uuid.uuid4().hex[:8]
+        while checkpoint_id in existing_ids:
+            checkpoint_id = uuid.uuid4().hex[:8]
+        task.checkpoints.append(
+            Checkpoint(
+                id=checkpoint_id,
+                title=clean_title,
+                status="pending",
+                created_at=utc_now(),
+            )
+        )
+        task.updated_at = utc_now()
+        self._write(task)
+        return task
+
+    def complete_checkpoint(self, task_id: str, checkpoint_id: str) -> Task:
+        if not _TASK_ID.fullmatch(checkpoint_id):
+            raise TaskStoreError("Checkpoint ID must be an eight-character lowercase hexadecimal ID")
+        task = self.get(task_id)
+        checkpoint = next((item for item in task.checkpoints if item.id == checkpoint_id), None)
+        if checkpoint is None:
+            raise TaskStoreError(f"Checkpoint not found: {checkpoint_id}")
+        if checkpoint.status == "done":
+            return task
+        checkpoint.status = "done"
+        checkpoint.completed_at = utc_now()
         task.updated_at = utc_now()
         self._write(task)
         return task

@@ -23,21 +23,22 @@ This is the master spec. Keep it under 2,000 words (`scripts/check-words.sh` che
 
 **Android phone:** read and edit docs, review diffs, Termux + SSH, and browser-based coding assistants.
 
-## 3. Local task CLI
+## 3. Local task and context CLI
 
-The starter runtime is dependency-free Python 3.10+ and manages task state plus portable assistant handoffs. From the repository root:
+The starter runtime is dependency-free Python 3.10+ and manages task state, resumable checkpoints, bounded project context, and portable assistant handoffs:
 
 ```bash
 python3 -m workshop doctor
 python3 -m workshop task create "Implement feature" --description "Goal and acceptance criteria"
-python3 -m workshop task list
-python3 -m workshop task show TASK_ID
-python3 -m workshop task status TASK_ID in_progress
-python3 -m workshop task note TASK_ID "Important finding"
-python3 -m workshop task handoff TASK_ID --output HANDOFF_TASK.md
+python3 -m workshop task checkpoint add TASK_ID "Inspect code"
+python3 -m workshop task checkpoint list TASK_ID
+python3 -m workshop task checkpoint complete TASK_ID CHECKPOINT_ID
+python3 -m workshop task resume TASK_ID
+python3 -m workshop task handoff TASK_ID --output .workshop/handoff.md
+python3 -m workshop context build --project . --max-words 2500 --output .workshop/context.md
 ```
 
-Task data lives under `.workshop/` and is ignored by Git. Change the storage location with `python3 -m workshop --home PATH task list`. The CLI makes no network requests and does not call an AI model.
+Task data lives under `.workshop/` and is ignored by Git. The context builder reads an allowlist of six project context files, enforces per-file and aggregate word budgets, and rejects symlinks that resolve outside the project root. The CLI makes no network requests and does not call an AI model.
 
 ## 4. Providers and gateways
 
@@ -51,13 +52,13 @@ Do not implement provider requests until the common interface and fail-closed sp
 
 ## 5. Coding agent and browser workflow
 
-OpenCode is a candidate coding agent, not a required dependency. Verify installation steps and provider support before relying on it. Browser assistants should receive a generated handoff and return a reviewable result; they must not become an undocumented source of project state.
+OpenCode is a candidate coding agent, not a required dependency. Verify installation steps and provider support before relying on it. Browser assistants should receive generated task and context handoffs and return reviewable results; they must not become an undocumented source of project state.
 
 ## 6. Repository layout
 
 ```text
 ai-workshop-template/
-├── workshop/              local task CLI and handoff renderer
+├── workshop/              local task, context, and handoff CLI
 ├── tests/unit/             Python unit tests
 ├── scripts/                word-budget check
 ├── tests/                  repository smoke checks
@@ -77,29 +78,29 @@ ai-workshop-template/
 
 ## 7. Context budget
 
-Free-tier APIs can have tight input limits, so context files stay concise.
+Free-tier APIs can have tight input limits, so context files stay concise. The context builder enforces these per-file maximums:
 
 | File | Max words |
-| :--- | :--- |
+| :--- | ---: |
 | AGENTS.md | 500 |
 | PROJECT_CONTEXT.md | 800 |
 | HANDOFF.md | 300 |
 | TODO.md | 500 |
 | docs/ARCHITECTURE.md | 600 |
 | docs/WORKFLOW.md | 800 |
-| docs/NEW_PROJECT.md | 700 |
-| DEVELOPMENT_LOG.md | Archive old entries after ~3,000 words |
+
+The default aggregate budget is 2,500 words. Raise it explicitly only when the selected model's context capacity and cost policy are verified.
 
 ## 8. Development workflow
 
-- **Start:** inspect branch and working tree; read `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, and `docs/WORKFLOW.md`; choose one task.
-- **During:** make one reviewable change at a time; run `python3 -m unittest discover -s tests/unit -v` and `bash scripts/check-words.sh && bash tests/smoke.sh`.
-- **End:** summarize changes and test results; update handoff and development log as appropriate; review `git diff`. Commit and push only when explicitly requested.
+- **Start:** inspect branch and working tree; read `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, and `docs/WORKFLOW.md`; resume an existing task or create one.
+- **During:** update task checkpoints and notes as work progresses; make one reviewable change at a time; run unit tests and repository checks.
+- **End:** export a task handoff, review `git diff`, and record test results. Commit and push only when explicitly requested.
 
 ## 9. Security and spending
 
 - Never commit keys, tokens, passwords, or `.env` files.
-- Treat `.workshop/` task descriptions and handoffs as private project data.
+- Treat `.workshop/` task descriptions, context bundles, and handoffs as private project data.
 - No paid usage without explicit approval.
 - A future provider router must reject unknown pricing or free-tier eligibility before making a request.
 - Follow provider terms; do not evade quotas with extra accounts.

@@ -16,7 +16,9 @@ Use this checklist after creating a repository from the template. Delete steps t
 
 ## 3. Verify the starter runtime
 - [ ] Run `python3 -m workshop doctor`.
-- [ ] Create a sample task with `python3 -m workshop task create` and generate a handoff.
+- [ ] Create a sample task with `python3 -m workshop task create`.
+- [ ] Add a checkpoint and verify `python3 -m workshop task resume TASK_ID`.
+- [ ] Build a context bundle with `python3 -m workshop context build --project . --output .workshop/context.md`.
 - [ ] Run `python3 -m unittest discover -s tests/unit -v`.
 - [ ] Run `bash scripts/check-words.sh && bash tests/smoke.sh`.
 
@@ -30,4 +32,4 @@ Use this checklist after creating a repository from the template. Delete steps t
 - [ ] Remove docs and sections that do not apply.
 - [ ] Keep context files under their word budgets and remove placeholder text.
 - [ ] Start on a feature branch; never commit directly to `main`.
-- [ ] Prompt an assistant: *"Read AGENTS.md, PROJECT_CONTEXT.md, HANDOFF.md, TODO.md, and docs/WORKFLOW.md. Inspect the working tree, then work on the first actionable TODO."*
+- [ ] Prompt an assistant: *"Read AGENTS.md, PROJECT_CONTEXT.md, HANDOFF.md, TODO.md, and docs/WORKFLOW.md. Inspect the working tree, then resume the current task or work on the first actionable TODO."*
