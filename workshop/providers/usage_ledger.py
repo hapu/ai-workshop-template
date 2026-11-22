@@ -410,7 +410,7 @@ class UsageLedger:
                 continue
 
             local_row = db.execute(
-                f"""SELECT COALESCE(SUM(e.{column}), 0)
+                f"""SELECT COALESCE(SUM({column}), 0)
                     FROM usage_events e JOIN usage_event_scopes s ON s.request_id = e.request_id
                     WHERE e.provider = ? AND s.scope = ? AND s.scope_id = ?
                       AND e.reserved_at > ? AND e.reserved_at <= ? AND e.reserved_at < ?""",
