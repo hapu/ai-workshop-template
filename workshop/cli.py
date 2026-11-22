@@ -365,6 +365,8 @@ def _run_provider(args: argparse.Namespace) -> int:
                     "No matching OpenRouter policy exists; add a disabled local policy with "
                     "the verified account-scoped requests/86400 quota before refreshing"
                 )
+            if not args.account_scope.strip() or len(args.account_scope.strip()) > 120:
+                raise PolicyDenied("Account scope must be a non-empty local alias up to 120 characters")
             api_key = os.environ.get("OPENROUTER_API_KEY", "")
             payload = fetch_openrouter_key_status(api_key)
             status = parse_openrouter_key_status(payload)
