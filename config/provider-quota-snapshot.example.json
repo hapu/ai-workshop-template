@@ -23,6 +23,15 @@
       "used": 8,
       "limit": 50,
       "reset_at": "2026-11-22T00:00:00Z"
+    },
+    {
+      "metric": "tokens",
+      "window_seconds": 60,
+      "scope": "organization",
+      "scope_id": "non-secret-org-alias",
+      "used": 100,
+      "limit": 12000,
+      "reset_at": "2026-11-21T12:01:00Z"
     }
   ]
 }
