@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from workshop.providers.policy import ModelPolicy
+from workshop.providers.reconciliation import SnapshotError
 from workshop.providers.usage_ledger import ReconciliationRequired, UsageLedger, QuotaExceeded
 
 
@@ -79,11 +80,12 @@ class QuotaScopeV2Tests(unittest.TestCase):
     def test_snapshot_requires_scope_id_for_project_and_organization(self):
         raw = self.snapshot()
         raw["quotas"][1].pop("scope_id")
-        with self.assertRaisesRegex(ValueError, "requires scope_id"):
+        with self.assertRaisesRegex(SnapshotError, "requires scope_id"):
             self.ledger.import_snapshot(raw, self.policy, now=1001)
 
     def test_v1_database_migrates_existing_events_and_snapshots(self):
-        db = sqlite3.connect(self.path)
+        legacy_path = Path(self.temp.name) / "legacy.sqlite3"
+        db = sqlite3.connect(legacy_path)
         db.executescript("""
             CREATE TABLE usage_events (
                 request_id TEXT PRIMARY KEY, provider TEXT NOT NULL, model TEXT NOT NULL,
@@ -102,8 +104,8 @@ class QuotaScopeV2Tests(unittest.TestCase):
         """)
         db.commit()
         db.close()
-        UsageLedger(self.path)
-        db = sqlite3.connect(self.path)
+        UsageLedger(legacy_path)
+        db = sqlite3.connect(legacy_path)
         version = db.execute("PRAGMA user_version").fetchone()[0]
         scopes = set(db.execute("SELECT scope, scope_id FROM usage_event_scopes WHERE request_id='old-event'"))
         snapshot_scope = db.execute("SELECT scope_id FROM external_quota_snapshots WHERE snapshot_id='old-snapshot'").fetchone()[0]
