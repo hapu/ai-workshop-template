@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sqlite3
 import tempfile
 import unittest
@@ -8,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from workshop.providers.policy import ModelPolicy
-from workshop.providers.reconciliation import SnapshotError
 from workshop.providers.usage_ledger import ReconciliationRequired, UsageLedger, QuotaExceeded, UsageLedgerError
 
 
