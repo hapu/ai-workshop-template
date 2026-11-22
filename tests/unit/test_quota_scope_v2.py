@@ -9,7 +9,7 @@ from pathlib import Path
 
 from workshop.providers.policy import ModelPolicy
 from workshop.providers.reconciliation import SnapshotError
-from workshop.providers.usage_ledger import ReconciliationRequired, UsageLedger, QuotaExceeded
+from workshop.providers.usage_ledger import ReconciliationRequired, UsageLedger, QuotaExceeded, UsageLedgerError
 
 
 def iso(value: float) -> str:
@@ -80,7 +80,7 @@ class QuotaScopeV2Tests(unittest.TestCase):
     def test_snapshot_requires_scope_id_for_project_and_organization(self):
         raw = self.snapshot()
         raw["quotas"][1].pop("scope_id")
-        with self.assertRaisesRegex(SnapshotError, "requires scope_id"):
+        with self.assertRaisesRegex(UsageLedgerError, "requires scope_id"):
             self.ledger.import_snapshot(raw, self.policy, now=1001)
 
     def test_v1_database_migrates_existing_events_and_snapshots(self):
