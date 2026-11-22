@@ -138,6 +138,53 @@ class QuotaScopeV2Tests(unittest.TestCase):
             results = list(pool.map(attempt, (1, 2)))
         self.assertEqual(sum(results), 1)
 
+
+    def test_legacy_account_scope_is_recorded_even_when_policy_only_uses_project(self):
+        project_policy = ModelPolicy.from_dict({
+            "provider": "demo", "model": "project-only-model", "enabled": True,
+            "access_type": "free_tier", "verification_status": "verified",
+            "verified_at": "2026-11-20", "expires_at": "2027-02-20",
+            "source_url": "https://provider.example/pricing",
+            "terms_url": "https://provider.example/terms", "regions": ["MX"],
+            "input_cost_usd_per_million_tokens": 0, "output_cost_usd_per_million_tokens": 0,
+            "max_input_tokens": 5000, "max_output_tokens": 1000,
+            "quotas": [{"metric": "requests", "window_seconds": 60, "limit": 10, "scope": "project"}],
+        })
+        account_policy = ModelPolicy.from_dict({
+            "provider": "demo", "model": "account-model", "enabled": True,
+            "access_type": "free_tier", "verification_status": "verified",
+            "verified_at": "2026-11-20", "expires_at": "2027-02-20",
+            "source_url": "https://provider.example/pricing",
+            "terms_url": "https://provider.example/terms", "regions": ["MX"],
+            "input_cost_usd_per_million_tokens": 0, "output_cost_usd_per_million_tokens": 0,
+            "max_input_tokens": 5000, "max_output_tokens": 1000,
+            "quotas": [{"metric": "requests", "window_seconds": 60, "limit": 1, "scope": "account"}],
+        })
+        project_snapshot = {
+            "schema_version": 1, "snapshot_id": "project-only-snapshot",
+            "provider": "demo", "model": "project-only-model", "account_scope": "shared-account",
+            "source_type": "dashboard", "source_url": "https://provider.example/limits",
+            "captured_at": iso(1000),
+            "quotas": [{"metric": "requests", "window_seconds": 60, "scope": "project",
+                        "scope_id": "project-a", "used": 0, "limit": 10, "reset_at": iso(1060)}],
+        }
+        account_snapshot = {
+            "schema_version": 1, "snapshot_id": "account-only-snapshot",
+            "provider": "demo", "model": "account-model", "account_scope": "shared-account",
+            "source_type": "dashboard", "source_url": "https://provider.example/limits",
+            "captured_at": iso(1000),
+            "quotas": [{"metric": "requests", "window_seconds": 60, "scope": "account",
+                        "used": 0, "limit": 1, "reset_at": iso(1060)}],
+        }
+        self.ledger.import_snapshot(project_snapshot, project_policy, now=1001)
+        self.ledger.import_snapshot(account_snapshot, account_policy, now=1001)
+        self.ledger.reserve(project_policy, account_scope="shared-account",
+                            quota_scopes={"project": "project-a"},
+                            input_tokens=1, output_tokens=1, now=1002)
+        with self.assertRaises(QuotaExceeded):
+            self.ledger.reserve(account_policy, account_scope="shared-account",
+                                input_tokens=1, output_tokens=1, now=1003)
+
     def test_v1_database_migrates_existing_events_and_snapshots(self):
         legacy_path = Path(self.temp.name) / "legacy.sqlite3"
         db = sqlite3.connect(legacy_path)
