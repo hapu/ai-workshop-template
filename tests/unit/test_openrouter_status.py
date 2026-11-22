@@ -72,6 +72,18 @@ class OpenRouterStatusTests(unittest.TestCase):
         with self.assertRaises(OpenRouterStatusError):
             parse_openrouter_key_status(data)
 
+    def test_rejects_incomplete_budget(self):
+        data = payload()
+        del data["data"]["budgets"][0]["remaining_usd"]
+        with self.assertRaises(OpenRouterStatusError):
+            parse_openrouter_key_status(data)
+
+    def test_rejects_missing_credit_limit_field(self):
+        data = payload()
+        del data["data"]["limit_remaining"]
+        with self.assertRaises(OpenRouterStatusError):
+            parse_openrouter_key_status(data)
+
     def test_fetch_uses_bearer_get_and_parses_json(self):
         response = _Response(json.dumps(payload()).encode())
         with patch("workshop.providers.openrouter_status.build_opener") as build:
