@@ -38,7 +38,7 @@ class OpenRouterAdapter:
         messages: Sequence[Message],
         max_output_tokens: int,
     ) -> ProviderResponse:
-        if not isinstance(model, str) or not model.strip():
+        if not isinstance(model, str) or not model.strip() or model != model.strip():
             raise ValueError("Model ID must be a non-empty string")
         if isinstance(max_output_tokens, bool) or not isinstance(max_output_tokens, int) or max_output_tokens <= 0:
             raise ValueError("Maximum output tokens must be a positive integer")
@@ -74,7 +74,7 @@ class OpenRouterAdapter:
         try:
             with urlopen(request, timeout=self._timeout_seconds) as response:
                 raw = response.read(_MAX_RESPONSE_BYTES + 1)
-                request_id = response.headers.get("X-Request-Id")
+                request_id = response.headers.get("X-Generation-Id") or response.headers.get("X-Request-Id")
         except HTTPError as exc:
             raise ProviderTransportError(
                 f"OpenRouter returned HTTP {exc.code}; request was not retried"

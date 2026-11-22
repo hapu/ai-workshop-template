@@ -44,7 +44,7 @@ def response_payload(model: str = "vendor/model:free") -> dict[str, object]:
 
 class OpenRouterAdapterTests(unittest.TestCase):
     def test_request_is_pinned_to_one_model_and_disables_provider_fallbacks(self) -> None:
-        fake = FakeHTTPResponse(response_payload(), {"X-Request-Id": "req-123"})
+        fake = FakeHTTPResponse(response_payload(), {"X-Generation-Id": "req-123"})
         with patch("workshop.providers.openrouter.urlopen", return_value=fake) as send:
             result = OpenRouterAdapter("test-secret").complete(
                 model="vendor/model:free", messages=[Message("user", "hello")], max_output_tokens=64
