@@ -173,7 +173,7 @@ class ExternalQuotaSnapshot:
         if not isinstance(raw_quotas, list) or not raw_quotas:
             raise SnapshotError("Snapshot must contain at least one quota entry")
         parsed_quotas: list[SnapshotQuota] = []
-        seen: set[tuple[str, int, str, str]] = set()
+        seen: set[tuple[str, int, str]] = set()
         for item in raw_quotas:
             if not isinstance(item, dict):
                 raise SnapshotError("Every snapshot quota entry must be an object")
@@ -200,6 +200,10 @@ class ExternalQuotaSnapshot:
                 scope_id = account_scope.strip() if scope == "account" else policy.model
             if not isinstance(scope_id, str) or not scope_id.strip() or len(scope_id.strip()) > 120:
                 raise SnapshotError("Quota scope_id must be a non-empty local alias up to 120 characters")
+            if scope == "account" and scope_id.strip() != account_scope.strip():
+                raise SnapshotError("Account quota scope_id must match the snapshot account_scope")
+            if scope == "model" and scope_id.strip() != policy.model:
+                raise SnapshotError("Model quota scope_id must match the exact policy model ID")
             if "limit" not in item or isinstance(item["limit"], bool) or not isinstance(item["limit"], int):
                 raise SnapshotError("Snapshot quota limit must be an integer")
             if item["limit"] != policy_quota.limit:
@@ -210,7 +214,7 @@ class ExternalQuotaSnapshot:
             used = item["used"]
             if isinstance(used, bool) or not isinstance(used, int) or used < 0:
                 raise SnapshotError("Snapshot used value must be a non-negative integer")
-            key = (metric, window, scope, scope_id.strip())
+            key = (metric, window, scope)
             if key in seen:
                 raise SnapshotError(f"Duplicate snapshot quota entry: {key}")
             seen.add(key)
