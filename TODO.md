@@ -11,7 +11,8 @@ Template-maintenance backlog. Keep one active task under Now and make each item 
 - [x] Add local atomic request/token quota reservations and adapter runner.
 - [x] Import external provider quota snapshots and combine them with subsequent local reservations.
 - [x] Import Groq's documented RPD and combined TPM response headers; account for combined token reservations.
-- [ ] Add authenticated provider quota refresh and complete provider-specific rate-limit handling where safe APIs exist.
+- [x] Add authenticated OpenRouter key-status refresh for the documented daily free-model request counter; monetary budget fields remain informational.
+- [ ] Add complete provider-specific rate-limit handling for remaining quota dimensions where safe APIs exist.
 - [ ] Add optional encrypted ledger export/import or a shared ledger for multi-device usage.
 - [ ] Design measured, fail-closed fallback behavior between independently verified free models.
 
