@@ -12,3 +12,9 @@ coverage/
 .cache/
 *.log
 .DS_Store
+
+# Local task state and generated private context bundles.
+.workshop/
+
+# Local, manually verified provider permissions; never commit real allowlists.
+config/provider-catalog.json

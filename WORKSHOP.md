@@ -1,108 +1,84 @@
 # AI Development Workshop
 
-A portable, provider-agnostic setup for building software with AI assistants from an Android phone and a low-power Chromebook. This repo is a **GitHub template**: for each new idea, click "Use this template" and you get a clean copy with every context file ready.
+A portable, provider-agnostic setup for building software with AI assistants from an Android phone and a low-power Chromebook. This repository is a **GitHub template**: create a clean copy for each new project and keep this master repository generic.
 
 This is the master spec. Keep it under 2,000 words (`scripts/check-words.sh` checks).
 
 ## 1. Principles
 
 1. **Provider agnostic:** no single provider or model is required.
-2. **Free-first, honestly labeled:** separate permanent free quotas from trials and promo credits.
-3. **Git is the source of truth:** code, decisions, and handoff notes live in the repo, not in chats.
-4. **Short, current context:** every assistant gets concise instructions (see section 6).
-5. **Cloud inference, light local tools.**
-6. **Human control:** you approve spending, credentials, and destructive actions.
-7. **Reproducible:** record setup steps, versions, and tests.
+2. **Free-first, honestly labeled:** separate permanent free quotas from trials and promotional credits.
+3. **Git is the source of truth:** code, decisions, and handoff notes live in the repo, not only in chats.
+4. **Short, current context:** every assistant gets concise, version-controlled instructions.
+5. **Cloud inference, light local tools:** do not require a local LLM.
+6. **Human control:** spending, credentials, destructive actions, and publication require approval.
+7. **Fail closed:** if free-tier eligibility, current pricing, region access, or terms are unknown, reject the request.
+8. **Reproducible:** record setup steps, versions, and exact test results.
 
 ## 2. Devices
 
-**Chromebook** (Celeron N4500, 4 GB RAM, ~15 GB Linux storage): editing, Git, terminal, scripts, tests.
-- Use: `vim`, `nano`, `micro`, `Geany`, `git`, `uv`.
-- Avoid: VS Code or other Electron IDEs, Docker, local LLMs.
-- Keep browser tabs few; ChromeOS kills the Linux container when memory runs out.
+**Chromebook** (Celeron N4500, 4 GB RAM, ~15 GB Linux storage): editing, Git, terminal, scripts, and lightweight tests.
+- Use lightweight tools such as `vim`, `nano`, `micro`, `git`, and Python.
+- Avoid Docker, local LLMs, heavy IDEs, and large databases.
+- Keep browser tabs few; ChromeOS may stop the Linux container when memory runs out.
 
-**Android phone:** read and edit docs, review diffs, Termux + SSH, cloud coding agents.
+**Android phone:** read and edit docs, review diffs, Termux + SSH, and browser-based coding assistants.
 
-## 3. Providers and gateways
+## 3. Local task and context CLI
 
-Providers, limits, and model names change. Track them in `docs/PROVIDERS.md` with a last-verified date and an official link. Never assume a free tier is permanent.
+The dependency-free Python 3.10+ runtime manages task state, resumable checkpoints, bounded project context, and portable handoffs:
 
-- **OpenRouter** (optional): one endpoint for many models; check each model's free-tier conditions.
-- **LiteLLM** (optional): routing and fallbacks. It is software, not extra free quota.
-- Start with one provider and no gateway. Add a gateway only to solve a concrete problem.
-
-## 4. Coding agent
-
-**OpenCode** (opencode.ai) is the primary candidate because it supports many providers. Verify install steps and provider support first, and test on both Chromebook and phone. Evaluate Aider, Cline, and others only after the basic workflow is stable.
-
-## 5. Repository layout
-
-```text
-ai-workshop-template/
-├── README.md             how to use the template
-├── WORKSHOP.md           this spec
-├── AGENTS.md             rules for AI agents
-├── PROJECT_CONTEXT.md    goal, scope, constraints, status
-├── HANDOFF.md            state for the next session or assistant
-├── TODO.md               prioritized tasks
-├── DEVELOPMENT_LOG.md    changes and experiments
-├── DECISIONS.md          decisions and rationale
-├── docs/
-│   ├── NEW_PROJECT.md    setup checklist for a copied template
-│   ├── PROVIDERS.md      providers, quotas, last-verified dates
-│   ├── WORKFLOW.md       multi-device and multi-agent process
-│   ├── SECURITY.md       credentials and safety rules
-│   ├── ARCHITECTURE.md   components of the current project
-│   └── ROADMAP.md        project phases and checkpoints
-├── scripts/              helper scripts (check-words.sh)
-├── tests/                repo health checks (smoke.sh)
-├── config/examples/      sample config, never real secrets
-└── .gitignore
+```bash
+python3 -m workshop task create "Implement feature"
+python3 -m workshop task checkpoint add TASK_ID "Inspect code"
+python3 -m workshop task checkpoint complete TASK_ID CHECKPOINT_ID
+python3 -m workshop task resume TASK_ID
+python3 -m workshop task handoff TASK_ID --output .workshop/handoff.md
+python3 -m workshop context build --project . --max-words 2500 --output .workshop/context.md
 ```
 
-Branches: `main` is stable. Use short-lived `feature/<name>` branches and review diffs before merging. Keep unfinished work on branches or tags until inspected.
+Task data lives under `.workshop/` and is ignored by Git. The context builder reads an allowlist of six project context files, enforces per-file and aggregate word budgets, and rejects symlinks that resolve outside the project root.
 
-## 6. Context budget
+## 4. Provider contracts and zero-cost policy
 
-Free-tier APIs have tight input limits, so context files stay small. Use bullets, not narratives.
+`workshop/providers/base.py` defines the adapter contract. `workshop/providers/policy.py` loads an explicit local model catalog and performs a fail-closed preflight. No actual inference adapters are included and the default catalog is empty.
+
+Before adding a model policy, verify official pricing, whether access is genuinely free rather than trial/credits, eligible regions and account types, current model limits, and terms. Include verification and expiry dates and official HTTPS source links. The policy gate checks the HTTPS scheme, but a person must verify that the links are official and the policy fields reflect the provider's current terms. The gate rejects any unknown, unverified, expired, non-zero-priced, disabled, region-ineligible, or over-limit model.
+
+Do not bypass the gate in a future provider adapter. A preflight approval does not guarantee provider-side availability and does not replace account spending limits or free-quota usage accounting. Add those controls before enabling live adapters.
+
+## 5. Coding agent and browser workflow
+
+OpenCode is a candidate coding agent, not a required dependency. Browser assistants should receive generated task and context handoffs and return reviewable results; they must not become an undocumented source of project state.
+
+## 6. Context budgets
 
 | File | Max words |
-| :--- | :--- |
+| :--- | ---: |
 | AGENTS.md | 500 |
 | PROJECT_CONTEXT.md | 800 |
 | HANDOFF.md | 300 |
 | TODO.md | 500 |
 | docs/ARCHITECTURE.md | 600 |
 | docs/WORKFLOW.md | 800 |
-| docs/NEW_PROJECT.md | 700 |
-| DEVELOPMENT_LOG.md | Archive entries older than the last ~20 once it passes 3,000 |
 
-## 7. Workflow (details in `docs/WORKFLOW.md`)
+The default aggregate context budget is 2,500 words. Raise it explicitly only after confirming model context capacity and cost policy.
 
-- **Start:** inspect branch and working tree, read `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, and `docs/WORKFLOW.md`, `git pull --rebase` only if clean, pick one task.
-- **During:** one small change at a time, run `bash scripts/check-words.sh && bash tests/smoke.sh` (and project checks as added), update docs when behavior or decisions change.
-- **End:** summarize, record check results, update `HANDOFF.md` (and `DEVELOPMENT_LOG.md` for notable changes/experiments), review `git diff`, commit and push only when explicitly asked.
+## 7. Development workflow
 
-## 8. Security (details in `docs/SECURITY.md`)
+- **Start:** inspect branch and working tree; read project context; resume an existing task or create one.
+- **During:** update task checkpoints and notes; make one reviewable change at a time; run unit tests and repository checks.
+- **Before inference:** run the provider preflight with the correct region and estimates. If it denies, do not try another model unless that model has its own verified policy.
+- **End:** export a task handoff, review `git diff`, and record exact test results. Commit and push only when explicitly requested.
 
-- Never commit keys, tokens, passwords, or `.env` files.
-- Use a separate SSH key or fine-grained token per device, scoped to needed repos only.
-- Never expose an unauthenticated gateway to the internet.
-- No paid usage without your explicit approval.
-- Follow provider terms; don't evade quotas with extra accounts.
+## 8. Security and spending
 
-## 9. Starting a new idea
+- Never commit API keys, tokens, passwords, or `.env` files.
+- Treat `.workshop/` task descriptions, context bundles, and handoffs as private project data.
+- Keep `config/provider-catalog.json` local; only the empty example is tracked.
+- No paid usage without explicit approval. Unknown prices or eligibility must fail closed.
+- Follow provider terms; do not evade quotas with extra accounts.
 
-Follow `docs/NEW_PROJECT.md`. In short: create the repo from the template, fill the context files, choose a stack, add a run command and tests, then start the first TODO item.
+## 9. Roadmap and template maintenance
 
-## 10. Roadmap (details in `docs/ROADMAP.md`)
-
-1. **Foundation:** repo, branch workflow, Chromebook setup, phone access.
-2. **Providers:** inventory with verified dates.
-3. **Coding agent:** one provider working end to end, then add more.
-4. **Context:** test handoffs between different assistants.
-5. **Automation:** routing and monitoring only if measurably useful.
-
-## 11. Template maintenance
-
-This file is the workshop spec. Keep it generic. Project-specific goals, state, and tasks belong in `PROJECT_CONTEXT.md`, `HANDOFF.md`, and `TODO.md`; do not turn the template into a project.
+See `docs/ROADMAP.md` for implementation phases and `docs/PROVIDERS.md` for the verification protocol. Keep this master repository generic. Project-specific goals, context, and tasks belong in each repository created from the template.
