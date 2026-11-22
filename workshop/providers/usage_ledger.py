@@ -75,7 +75,7 @@ class UsageReservation:
 
 _COLUMNS = {
     "requests": "requests",
-    "tokens": "(input_tokens + output_tokens)",
+    "tokens": "(e.input_tokens + e.output_tokens)",
     "input_tokens": "input_tokens",
     "output_tokens": "output_tokens",
     "neurons": "neurons",
