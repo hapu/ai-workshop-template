@@ -1,70 +1,83 @@
 # AI Development Workshop
 
-A portable, provider-agnostic setup for building software with AI assistants from an Android phone and a low-power Chromebook. This repo is a **GitHub template**: for each new idea, click "Use this template" and you get a clean copy with every context file ready.
+A portable, provider-agnostic setup for building software with AI assistants from an Android phone and a low-power Chromebook. This repository is a **GitHub template**: create a clean copy for each new project and keep this master repository generic.
 
 This is the master spec. Keep it under 2,000 words (`scripts/check-words.sh` checks).
 
 ## 1. Principles
 
 1. **Provider agnostic:** no single provider or model is required.
-2. **Free-first, honestly labeled:** separate permanent free quotas from trials and promo credits.
-3. **Git is the source of truth:** code, decisions, and handoff notes live in the repo, not in chats.
-4. **Short, current context:** every assistant gets concise instructions (see section 6).
-5. **Cloud inference, light local tools.**
-6. **Human control:** you approve spending, credentials, and destructive actions.
-7. **Reproducible:** record setup steps, versions, and tests.
+2. **Free-first, honestly labeled:** separate permanent free quotas from trials and promotional credits.
+3. **Git is the source of truth:** code, decisions, and handoff notes live in the repo, not only in chats.
+4. **Short, current context:** every assistant gets concise, version-controlled instructions.
+5. **Cloud inference, light local tools:** do not require a local LLM.
+6. **Human control:** spending, credentials, destructive actions, and publication require approval.
+7. **Reproducible:** record setup steps, versions, and exact test results.
 
 ## 2. Devices
 
-**Chromebook** (Celeron N4500, 4 GB RAM, ~15 GB Linux storage): editing, Git, terminal, scripts, tests.
-- Use: `vim`, `nano`, `micro`, `Geany`, `git`, `uv`.
-- Avoid: VS Code or other Electron IDEs, Docker, local LLMs.
-- Keep browser tabs few; ChromeOS kills the Linux container when memory runs out.
+**Chromebook** (Celeron N4500, 4 GB RAM, ~15 GB Linux storage): editing, Git, terminal, scripts, and lightweight tests.
+- Use lightweight tools such as `vim`, `nano`, `micro`, `git`, and Python.
+- Avoid Docker, local LLMs, heavy IDEs, and large databases.
+- Keep browser tabs few; ChromeOS may stop the Linux container when memory runs out.
 
-**Android phone:** read and edit docs, review diffs, Termux + SSH, cloud coding agents.
+**Android phone:** read and edit docs, review diffs, Termux + SSH, and browser-based coding assistants.
 
-## 3. Providers and gateways
+## 3. Local task CLI
 
-Providers, limits, and model names change. Track them in `docs/PROVIDERS.md` with a last-verified date and an official link. Never assume a free tier is permanent.
+The starter runtime is dependency-free Python 3.10+ and manages task state plus portable assistant handoffs. From the repository root:
 
-- **OpenRouter** (optional): one endpoint for many models; check each model's free-tier conditions.
-- **LiteLLM** (optional): routing and fallbacks. It is software, not extra free quota.
-- Start with one provider and no gateway. Add a gateway only to solve a concrete problem.
+```bash
+python3 -m workshop doctor
+python3 -m workshop task create "Implement feature" --description "Goal and acceptance criteria"
+python3 -m workshop task list
+python3 -m workshop task show TASK_ID
+python3 -m workshop task status TASK_ID in_progress
+python3 -m workshop task note TASK_ID "Important finding"
+python3 -m workshop task handoff TASK_ID --output HANDOFF_TASK.md
+```
 
-## 4. Coding agent
+Task data lives under `.workshop/` and is ignored by Git. Change the storage location with `python3 -m workshop --home PATH task list`. The CLI makes no network requests and does not call an AI model.
 
-**OpenCode** (opencode.ai) is the primary candidate because it supports many providers. Verify install steps and provider support first, and test on both Chromebook and phone. Evaluate Aider, Cline, and others only after the basic workflow is stable.
+## 4. Providers and gateways
 
-## 5. Repository layout
+Provider limits and model names change. Track them in `docs/PROVIDERS.md` with a last-verified date and official source. Never assume a free tier is permanent.
+
+- **OpenRouter** (optional): one endpoint for multiple models; check each model's free-tier conditions.
+- **LiteLLM** (optional): routing and fallbacks; it does not provide additional free quota.
+- Start with one verified provider and no gateway. Add a gateway only to solve a measured problem.
+
+Do not implement provider requests until the common interface and fail-closed spending gate are tested.
+
+## 5. Coding agent and browser workflow
+
+OpenCode is a candidate coding agent, not a required dependency. Verify installation steps and provider support before relying on it. Browser assistants should receive a generated handoff and return a reviewable result; they must not become an undocumented source of project state.
+
+## 6. Repository layout
 
 ```text
 ai-workshop-template/
-├── README.md             how to use the template
-├── WORKSHOP.md           this spec
-├── AGENTS.md             rules for AI agents
-├── PROJECT_CONTEXT.md    goal, scope, constraints, status
-├── HANDOFF.md            state for the next session or assistant
-├── TODO.md               prioritized tasks
-├── DEVELOPMENT_LOG.md    changes and experiments
-├── DECISIONS.md          decisions and rationale
-├── docs/
-│   ├── NEW_PROJECT.md    setup checklist for a copied template
-│   ├── PROVIDERS.md      providers, quotas, last-verified dates
-│   ├── WORKFLOW.md       multi-device and multi-agent process
-│   ├── SECURITY.md       credentials and safety rules
-│   ├── ARCHITECTURE.md   components of the current project
-│   └── ROADMAP.md        project phases and checkpoints
-├── scripts/              helper scripts (check-words.sh)
-├── tests/                repo health checks (smoke.sh)
-├── config/examples/      sample config, never real secrets
-└── .gitignore
+├── workshop/              local task CLI and handoff renderer
+├── tests/unit/             Python unit tests
+├── scripts/                word-budget check
+├── tests/                  repository smoke checks
+├── config/examples/        variable names only; no real secrets
+├── docs/                   architecture, workflow, providers, security, roadmap
+├── README.md               template and runtime quick start
+├── WORKSHOP.md             this master spec
+├── AGENTS.md               rules for AI agents
+├── PROJECT_CONTEXT.md      project goal, scope, constraints, status
+├── HANDOFF.md              state for the next session or assistant
+├── TODO.md                 prioritized tasks
+├── DEVELOPMENT_LOG.md      changes and experiments
+└── DECISIONS.md            decisions and rationale
 ```
 
-Branches: `main` is stable. Use short-lived `feature/<name>` branches and review diffs before merging. Keep unfinished work on branches or tags until inspected.
+`main` is stable. Use short-lived `feature/<name>` or `fix/<name>` branches. Review diffs before merging. Do not commit directly to `main`.
 
-## 6. Context budget
+## 7. Context budget
 
-Free-tier APIs have tight input limits, so context files stay small. Use bullets, not narratives.
+Free-tier APIs can have tight input limits, so context files stay concise.
 
 | File | Max words |
 | :--- | :--- |
@@ -75,34 +88,22 @@ Free-tier APIs have tight input limits, so context files stay small. Use bullets
 | docs/ARCHITECTURE.md | 600 |
 | docs/WORKFLOW.md | 800 |
 | docs/NEW_PROJECT.md | 700 |
-| DEVELOPMENT_LOG.md | Archive entries older than the last ~20 once it passes 3,000 |
+| DEVELOPMENT_LOG.md | Archive old entries after ~3,000 words |
 
-## 7. Workflow (details in `docs/WORKFLOW.md`)
+## 8. Development workflow
 
-- **Start:** inspect branch and working tree, read `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, and `docs/WORKFLOW.md`, `git pull --rebase` only if clean, pick one task.
-- **During:** one small change at a time, run `bash scripts/check-words.sh && bash tests/smoke.sh` (and project checks as added), update docs when behavior or decisions change.
-- **End:** summarize, record check results, update `HANDOFF.md` (and `DEVELOPMENT_LOG.md` for notable changes/experiments), review `git diff`, commit and push only when explicitly asked.
+- **Start:** inspect branch and working tree; read `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, and `docs/WORKFLOW.md`; choose one task.
+- **During:** make one reviewable change at a time; run `python3 -m unittest discover -s tests/unit -v` and `bash scripts/check-words.sh && bash tests/smoke.sh`.
+- **End:** summarize changes and test results; update handoff and development log as appropriate; review `git diff`. Commit and push only when explicitly requested.
 
-## 8. Security (details in `docs/SECURITY.md`)
+## 9. Security and spending
 
 - Never commit keys, tokens, passwords, or `.env` files.
-- Use a separate SSH key or fine-grained token per device, scoped to needed repos only.
-- Never expose an unauthenticated gateway to the internet.
-- No paid usage without your explicit approval.
-- Follow provider terms; don't evade quotas with extra accounts.
+- Treat `.workshop/` task descriptions and handoffs as private project data.
+- No paid usage without explicit approval.
+- A future provider router must reject unknown pricing or free-tier eligibility before making a request.
+- Follow provider terms; do not evade quotas with extra accounts.
 
-## 9. Starting a new idea
+## 10. Roadmap and template maintenance
 
-Follow `docs/NEW_PROJECT.md`. In short: create the repo from the template, fill the context files, choose a stack, add a run command and tests, then start the first TODO item.
-
-## 10. Roadmap (details in `docs/ROADMAP.md`)
-
-1. **Foundation:** repo, branch workflow, Chromebook setup, phone access.
-2. **Providers:** inventory with verified dates.
-3. **Coding agent:** one provider working end to end, then add more.
-4. **Context:** test handoffs between different assistants.
-5. **Automation:** routing and monitoring only if measurably useful.
-
-## 11. Template maintenance
-
-This file is the workshop spec. Keep it generic. Project-specific goals, state, and tasks belong in `PROJECT_CONTEXT.md`, `HANDOFF.md`, and `TODO.md`; do not turn the template into a project.
+See `docs/ROADMAP.md` for implementation phases and `docs/PROVIDERS.md` for the verification protocol. Keep this master repository generic. Project-specific goals, context, and tasks belong in each repository created from the template.

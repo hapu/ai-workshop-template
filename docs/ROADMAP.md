@@ -1,30 +1,41 @@
 # Roadmap
 
-Update checkboxes as work completes. Delete phases that do not apply.
+The master template is being upgraded incrementally. A checked box means the behavior exists and has been verified; planned work must remain visibly unchecked.
 
-## Phase 0: Project setup
-- [ ] Create the repo from the template
-- [ ] Fill `PROJECT_CONTEXT.md`, `TODO.md`, `HANDOFF.md`, and `docs/ARCHITECTURE.md`
-- [ ] Choose the stack and record the decision in `DECISIONS.md`
-- [ ] Add the run command and update `AGENTS.md`
-- [ ] Replace or extend `tests/smoke.sh` with project checks
+## Phase 1: Repository foundation
+- [x] Resolve the README/license mismatch by documenting the existing GPL-3.0 license.
+- [x] Add a dependency-free Python CLI entry point.
+- [x] Add local JSON task storage with validation and atomic writes.
+- [x] Generate portable Markdown handoffs from saved task state.
+- [x] Add unit tests and run them from the smoke test.
+- [x] Add continuous integration for supported Python versions.
 
-## Phase 1: First working slice
-- [ ] Build the smallest end-to-end behavior
-- [ ] Add visible output and a way to start the project
-- [ ] Record known limitations in `HANDOFF.md`
+## Phase 2: Reliable task and context management
+- [ ] Add task dependencies, checkpoints, and resumable workflow state.
+- [ ] Add structured project context loading with size limits.
+- [ ] Add safe import/export for task bundles.
+- [ ] Add recovery tests for interrupted writes and malformed state.
 
-## Phase 2: Quality
-- [ ] Add automated checks for the core behavior
-- [ ] Fix correctness and robustness issues
-- [ ] Run a test with a fresh assistant using only the repo
+## Phase 3: Provider adapters and routing
+- [ ] Define a common provider request/response interface.
+- [ ] Add provider-specific adapters behind optional dependencies.
+- [ ] Implement a hard free-tier eligibility and spending gate.
+- [ ] Add model routing by role, rate-limit handling, and safe fallback.
+- [ ] Verify model availability and quotas from official sources; record dates.
 
-## Phase 3: Optional integrations
-- [ ] Add provider or service integrations only when needed
-- [ ] Fill `docs/PROVIDERS.md` with verified limits and dates
-- [ ] Document how to disable or remove each optional service
+## Phase 4: Browser assistant interoperability
+- [ ] Standardize browser-ready handoff prompts.
+- [ ] Import assistant responses and proposed file changes safely.
+- [ ] Preserve context and provenance between API and browser sessions.
+- [ ] Add manual fallback instructions when API quotas are exhausted.
 
-## Phase 4: Maintenance
-- [ ] Re-verify provider limits and links
-- [ ] Archive old `DEVELOPMENT_LOG.md` entries
-- [ ] Remove docs and code that no longer apply
+## Phase 5: Controlled development automation
+- [ ] Add opt-in project checks and isolated execution.
+- [ ] Prepare Git branches and diffs without modifying `main`.
+- [ ] Require explicit approval for commits, pushes, pull requests, and merges.
+- [ ] Add rollback and recovery procedures.
+
+## Phase 6: Monitoring and maintenance
+- [ ] Add quota and usage reporting without storing API secrets.
+- [ ] Add scheduled provider re-verification (default: every 90 days).
+- [ ] Add end-to-end tests for routing, free-only enforcement, and recovery.

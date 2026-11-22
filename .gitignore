@@ -12,3 +12,6 @@ coverage/
 .cache/
 *.log
 .DS_Store
+
+# Local task state may contain private project context and paths.
+.workshop/

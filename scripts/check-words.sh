@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Flags context files that exceed their word budget.
+set -euo pipefail
 fail=0
 check() {
   [ -f "$1" ] || return 0
@@ -15,4 +16,4 @@ check TODO.md 500
 check docs/ARCHITECTURE.md 600
 check docs/WORKFLOW.md 800
 check docs/NEW_PROJECT.md 700
-exit $fail
+exit "$fail"
