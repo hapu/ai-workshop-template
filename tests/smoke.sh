@@ -15,10 +15,10 @@ scripts/check-words.sh tests/smoke.sh
 workshop/__init__.py workshop/__main__.py workshop/cli.py
 workshop/models.py workshop/task_store.py workshop/handoff.py workshop/context_manager.py
 workshop/providers/__init__.py workshop/providers/base.py workshop/providers/policy.py
-workshop/providers/usage_ledger.py workshop/providers/runner.py workshop/providers/reconciliation.py
+workshop/providers/usage_ledger.py workshop/providers/runner.py workshop/providers/reconciliation.py workshop/providers/openrouter.py
 tests/unit/test_quota_reconciliation.py tests/unit/test_task_store.py tests/unit/test_context_manager.py
 tests/unit/test_task_checkpoints.py tests/unit/test_task_persistence_v2.py tests/unit/test_provider_policy.py
-tests/unit/test_provider_runner.py tests/unit/test_usage_ledger.py
+tests/unit/test_provider_runner.py tests/unit/test_openrouter_adapter.py tests/unit/test_usage_ledger.py
 docs/ARCHITECTURE.md docs/NEW_PROJECT.md docs/PROVIDERS.md docs/ROADMAP.md docs/SECURITY.md docs/WORKFLOW.md"
 
 for path in $required; do
@@ -43,6 +43,7 @@ done
 
 if command -v python3 >/dev/null 2>&1; then
   if python3 -m workshop --version >/dev/null; then ok "CLI starts"; else bad "CLI starts"; fi
+  if python3 -m workshop provider chat --help >/dev/null; then ok "OpenRouter chat CLI help"; else bad "OpenRouter chat CLI help"; fi
   if python3 -m unittest discover -s tests/unit -v; then ok "Python unit tests"; else bad "Python unit tests"; fi
   if python3 - <<'PY'
 from pathlib import Path

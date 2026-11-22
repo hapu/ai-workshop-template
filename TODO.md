@@ -3,7 +3,7 @@
 Template-maintenance backlog. Keep one active task under Now and make each item verifiable.
 
 ## Now
-- [ ] Verify the user's actual provider project/account quotas and reconcile usage outside this local ledger before enabling the first adapter.
+- [ ] Verify actual OpenRouter account/project quotas, external usage, and billing safeguards before adding the first enabled model policy.
 
 ## Next
 - [x] Add atomic task writes, per-task concurrent-writer protection, and interrupted-write recovery.
@@ -20,4 +20,4 @@ Template-maintenance backlog. Keep one active task under Now and make each item 
 - [ ] Add Git branch preparation and approval-gated pull-request helpers.
 
 ## Blocked / needs decision
-- [ ] Provider integration order: choose based on current official free-tier eligibility, limits, region, and reliability.
+- [ ] Add a second provider only after OpenRouter account-level eligibility, quota, and no-billing safeguards are verified.

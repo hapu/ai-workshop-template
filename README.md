@@ -35,7 +35,7 @@ Task data and generated context bundles are stored locally under `.workshop/` an
 
 ## Provider safety gate
 
-The provider system currently supplies a common adapter contract and a local preflight gate. It does not contain live provider adapters or an approved model list. The empty example catalog intentionally denies every model until you verify its current official pricing, free-tier eligibility, account/region requirements, model token limits, and terms.
+The provider system includes a common adapter contract, a fail-closed quota gate, and a minimal OpenRouter Chat Completions adapter. The approved model list is empty by default. The empty example catalog intentionally denies every model until you verify its current official pricing, free-tier eligibility, account/region requirements, model token limits, and terms.
 
 ```bash
 # Create a local catalog; this file is ignored by Git.
@@ -58,9 +58,16 @@ python3 -m workshop provider reconcile .workshop/provider-snapshot.json
 # Inspect reconciled usage and local reservations.
 python3 -m workshop provider usage PROVIDER MODEL \
   --account-scope my-provider-project
+
+# Once a verified OpenRouter policy and fresh snapshots exist, send a gated request.
+# Set OPENROUTER_API_KEY in your shell environment first.
+python3 -m workshop provider chat exact/model-id:free \
+  --message "Explain the current task architecture." \
+  --input-tokens 1200 --max-output-tokens 400 --region MX \
+  --account-scope openrouter-personal
 ```
 
-The gate denies unknown, disabled, trial-only, unverified, expired, non-zero-priced, region-ineligible, or over-limit model policies. It requires current official HTTPS pricing and terms sources, per-request token limits, and quota windows. `provider preflight` is read-only and does not reserve usage. Future adapters must use `execute_with_free_tier_gate` from `workshop/providers/runner.py`: it verifies the policy, atomically reserves quota in SQLite, and only then invokes the adapter.
+The gate denies unknown, disabled, trial-only, unverified, expired, non-zero-priced, region-ineligible, or over-limit model policies. It requires current official HTTPS pricing and terms sources, per-request token limits, and quota windows. `provider preflight` is read-only and does not reserve usage. All adapters must use `execute_with_free_tier_gate` from `workshop/providers/runner.py`: it verifies the policy, atomically reserves quota in SQLite, and only then invokes the adapter.
 
 The local quota ledger uses `.workshop/provider-usage.sqlite3`. `--account-scope` remains the legacy account alias. Policies with organization or project quotas require separate non-secret aliases using repeated `--quota-scope TYPE=ALIAS` arguments (for example, `--quota-scope organization=my-org --quota-scope project=my-project`). Use the same alias wherever requests share that provider boundary. Do not put API keys in aliases. See `docs/PROVIDERS.md` for the quota boundary v2 model. The ledger requires a fresh external snapshot for every quota window before preflight or reservation can succeed. Snapshot age limits are specified in the model policy. Reservations made after the snapshot capture are added to provider-reported usage; earlier local reservations are assumed to be included in the snapshot.
 
@@ -84,7 +91,7 @@ OpenRouter's key endpoint provides the free-model daily request count, not every
 
 Groq response headers can be imported from a sanitized JSON map using `python3 -m workshop provider reconcile-groq-headers FILE --model MODEL --account-scope ORG_ALIAS --captured-at UTC_TIMESTAMP`. This imports only account-scoped requests/day and combined tokens/minute when the policy defines matching limits. The ledger counts input plus reserved output tokens for the combined token metric. It does not fetch headers itself; other documented Groq limits still require separate reconciliation. See `docs/PROVIDERS.md` for the exact format and caveats.
 
-No live API adapters or approved model entries are included. The provider comparison and official sources are in `docs/PROVIDERS.md`.
+The OpenRouter adapter is available through `provider chat`, but no model entries are approved by default. It disables provider-level fallbacks and never retries. The provider comparison and official sources are in `docs/PROVIDERS.md`.
 
 The context builder reads only `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/ARCHITECTURE.md`, and `docs/WORKFLOW.md`. It enforces per-file word limits and a total bundle budget, ignores unrelated files (including `.env`), and rejects symlinks that escape the project root.
 
@@ -110,7 +117,7 @@ GitHub Actions runs the checks with Python 3.10–3.13.
 - Never commit API keys, tokens, passwords, private keys, or `.env` files.
 - Treat `.workshop/`, task descriptions, generated handoffs, and the local usage ledger as private project data.
 - Keep `config/provider-catalog.json` local. Do not add a model until official sources support every policy field.
-- No paid model use without explicit approval. The CLI and policy gate make no model requests.
+- No paid model use without explicit approval. `provider chat` can make a request only after the local policy gate and fresh quota snapshots approve it.
 
 ## License
 

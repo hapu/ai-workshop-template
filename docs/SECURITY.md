@@ -11,7 +11,7 @@
 
 ## Provider and spending controls
 - The provider preflight denies unknown, disabled, trial-only, unverified, expired, region-ineligible, non-zero-priced, or over-limit models.
-- The local quota ledger reserves requests/token units atomically before inference; future adapters must use `execute_with_free_tier_gate`, not raw provider methods.
+- The local quota ledger reserves requests/token units atomically before inference; all adapters must use `execute_with_free_tier_gate`, not raw provider methods.
 - Use the same non-secret `account_scope` alias for every credential and local task using the same provider account. A new alias can reset local accounting, so do not create additional aliases for one account to evade a limit.
 - The local ledger cannot see usage from other devices/apps. Check the actual provider dashboard before every adapter is enabled and block calls when external usage is unknown.
 - Every quota window requires a fresh provider/dashboard snapshot; missing, stale, expired, or limit-mismatched snapshots block the request.
@@ -19,7 +19,8 @@
 - Imported snapshots are only as complete as the captured source data. A snapshot for one limit dimension does not prove that other request/token limits are reconciled.
 - A reservation is not refunded after timeouts or ambiguous failures; the provider may have received the request.
 - Pricing and eligibility must be backed by current official HTTPS sources and an expiry date.
-- A future provider adapter must call the gate before every request. No adapter may silently fall back to an unknown or paid model.
+- Every provider adapter must call the gate before every request. The OpenRouter adapter sends an exact model ID, sets `provider.allow_fallbacks` to `false`, and never retries. No adapter may silently fall back to an unknown or paid model.
+- The tracked model catalog stays empty. A configured OpenRouter key alone is not permission to send; policy and fresh quota snapshots must pass first.
 - The local policy gate is not an account spending cap and does not guarantee provider-side availability. Configure provider-side limits when available.
 - Follow provider terms and rate limits. Do not create extra accounts or keys to evade quotas.
 - No paid usage without explicit approval.

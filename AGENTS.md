@@ -23,7 +23,7 @@ Instructions for AI coding agents. Keep under 500 words.
 - **Branching:** Never commit directly to `main`. Use short-lived `feature/<topic>` or `fix/<topic>` branches; review diffs before merging.
 - **Output discipline:** Keep terminal output small. Pipe verbose logs to `/tmp/` or tail the last 20 lines.
 - **Safety:** Never delete existing work, install dependencies, use paid APIs, or expose credentials without explicit approval.
-- **Provider policy:** Unknown, unverified, expired, non-zero-priced, disabled, region-ineligible, or over-limit models must be rejected. Provider adapters must use `execute_with_free_tier_gate`, which reserves quota before network I/O. Never call raw adapters directly.
+- **Provider policy:** Unknown, unverified, expired, non-zero-priced, disabled, region-ineligible, or over-limit models must be rejected. All adapters must use `execute_with_free_tier_gate`, which reserves quota before network I/O. OpenRouter chat uses `OPENROUTER_API_KEY`, exact model IDs, disabled provider fallbacks, and no retries. Never call raw adapters directly.
 - **Quota scope:** Use one non-secret `account_scope` alias for all credentials sharing the same provider account. Import a fresh snapshot for every policy quota window. Local usage does not include external apps/devices; reconcile provider dashboards before enabling calls. Never refund ambiguous requests.
 - **Scope:** Stay provider-agnostic. Do not invent quotas, capabilities, or compatibility claims.
 - **Editing boundaries:** Do not modify generated, vendored, or test files unless the task requires it.
