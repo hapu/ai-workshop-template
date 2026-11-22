@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -225,3 +226,156 @@ class ExternalQuotaSnapshot:
 
     def captured_at_text(self) -> str:
         return _utc_text(self.captured_at)
+
+
+_GROQ_SOURCE_URL = "https://console.groq.com/docs/rate-limits"
+_GROQ_DURATION_TOKEN = re.compile(r"(\d+(?:\.\d+)?)([dhms])")
+_GROQ_HEADER_NAMES = frozenset({
+    "x-ratelimit-limit-requests",
+    "x-ratelimit-remaining-requests",
+    "x-ratelimit-reset-requests",
+    "x-ratelimit-limit-tokens",
+    "x-ratelimit-remaining-tokens",
+    "x-ratelimit-reset-tokens",
+})
+_GROQ_SECRET_HEADERS = frozenset({
+    "authorization", "proxy-authorization", "cookie", "set-cookie",
+    "x-api-key", "api-key", "x-auth-token",
+})
+
+
+def _duration_seconds(value: Any, field_name: str) -> int:
+    """Parse a provider duration such as 2m59.56s, rounding up to a safe second."""
+    if not isinstance(value, str) or not value.strip():
+        raise SnapshotError(f"{field_name} must be a duration such as 7.66s")
+    clean = value.strip()
+    units = {"d": Decimal(86400), "h": Decimal(3600), "m": Decimal(60), "s": Decimal(1)}
+    order = {"d": 0, "h": 1, "m": 2, "s": 3}
+    position = 0
+    previous_order = -1
+    total = Decimal(0)
+    while position < len(clean):
+        match = _GROQ_DURATION_TOKEN.match(clean, position)
+        if match is None:
+            raise SnapshotError(f"{field_name} is not a supported duration")
+        amount_text, unit = match.groups()
+        if order[unit] <= previous_order:
+            raise SnapshotError(f"{field_name} units must be unique and ordered from largest to smallest")
+        try:
+            amount = Decimal(amount_text)
+        except InvalidOperation as exc:
+            raise SnapshotError(f"{field_name} is not a valid duration") from exc
+        total += amount * units[unit]
+        previous_order = order[unit]
+        position = match.end()
+    if total <= 0:
+        raise SnapshotError(f"{field_name} must be greater than zero")
+    return int(total.to_integral_value(rounding=ROUND_CEILING))
+
+
+def _header_integer(headers: dict[str, str], name: str) -> int:
+    value = headers[name]
+    if not re.fullmatch(r"\d+", value.strip()):
+        raise SnapshotError(f"Groq header {name} must be a non-negative integer")
+    return int(value.strip())
+
+
+def groq_response_headers_to_snapshot(
+    headers: dict[str, Any],
+    policy: ModelPolicy,
+    *,
+    account_scope: str,
+    captured_at: str,
+    snapshot_id: str,
+) -> dict[str, Any]:
+    """Convert saved Groq response rate-limit headers into a canonical snapshot.
+
+    The documented headers expose RPD (requests/day) and combined TPM
+    (input + output tokens/minute). They do not expose every dashboard limit.
+    """
+    if policy.provider != "groq":
+        raise SnapshotError("Groq response headers can only be imported for a Groq policy")
+    if not isinstance(headers, dict):
+        raise SnapshotError("Groq headers file must be a JSON object of header names and values")
+
+    normalized: dict[str, str] = {}
+    seen: set[str] = set()
+    for raw_name, raw_value in headers.items():
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            raise SnapshotError("Every Groq header name must be a non-empty string")
+        name = raw_name.strip().casefold()
+        if name in _GROQ_SECRET_HEADERS:
+            raise SnapshotError("Do not import credentials, cookies, or authorization headers")
+        if name in seen:
+            raise SnapshotError(f"Duplicate Groq header name: {name}")
+        seen.add(name)
+        if name in _GROQ_HEADER_NAMES:
+            if not isinstance(raw_value, str) or not raw_value.strip():
+                raise SnapshotError(f"Groq header {name} must be a non-empty string")
+            normalized[name] = raw_value.strip()
+
+    captured = _utc_timestamp(captured_at, "captured_at")
+    mapping = (
+        ("requests", 86400, "requests"),
+        ("tokens", 60, "tokens"),
+    )
+    quotas: list[dict[str, Any]] = []
+    for metric, window_seconds, suffix in mapping:
+        matching = [
+            quota for quota in policy.quotas
+            if quota.metric == metric and quota.window_seconds == window_seconds and quota.scope == "account"
+        ]
+        if not matching:
+            continue
+        if len(matching) != 1:
+            raise SnapshotError(f"Groq policy has an ambiguous {metric}/{window_seconds}s account quota")
+        names = (
+            f"x-ratelimit-limit-{suffix}",
+            f"x-ratelimit-remaining-{suffix}",
+            f"x-ratelimit-reset-{suffix}",
+        )
+        present = [name in normalized for name in names]
+        if not any(present):
+            continue
+        if not all(present):
+            missing = [name for name in names if name not in normalized]
+            raise SnapshotError("Groq response is missing required headers: " + ", ".join(missing))
+
+        limit = _header_integer(normalized, names[0])
+        remaining = _header_integer(normalized, names[1])
+        if limit <= 0 or remaining > limit:
+            raise SnapshotError(f"Groq {metric} remaining/limit values are inconsistent")
+        policy_limit = matching[0].limit
+        if limit != policy_limit:
+            raise SnapshotError(
+                f"Groq {metric} header limit {limit} does not match the policy limit {policy_limit}"
+            )
+        reset_seconds = _duration_seconds(normalized[names[2]], names[2])
+        if reset_seconds > window_seconds:
+            raise SnapshotError(f"Groq {metric} reset duration exceeds its {window_seconds}-second window")
+        quotas.append({
+            "metric": metric,
+            "window_seconds": window_seconds,
+            "scope": "account",
+            "used": limit - remaining,
+            "limit": limit,
+            "reset_at": _utc_text(captured + reset_seconds),
+        })
+
+    if not quotas:
+        raise SnapshotError(
+            "No supported Groq quota headers matched the policy; configure account requests/86400 "
+            "and/or combined tokens/60 quotas and capture their headers"
+        )
+    return {
+        "schema_version": 1,
+        "snapshot_id": snapshot_id,
+        "provider": policy.provider,
+        "model": policy.model,
+        "account_scope": account_scope,
+        "source_type": "response_headers",
+        "source_url": _GROQ_SOURCE_URL,
+        "captured_at": _utc_text(captured),
+        "quotas": quotas,
+    }
+
