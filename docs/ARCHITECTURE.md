@@ -20,6 +20,10 @@ A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded
 - `config/provider-catalog.example.json` - empty catalog example; no model is pre-approved.
 - `.workshop/` - local task/context output; ignored by Git.
 
+## Task persistence (v2)
+
+Task JSON updates use unique temporary files in the destination directory, flush file contents before replacement, and atomically replace the destination. A per-task exclusive lock serializes read-modify-write operations across local processes; abandoned locks are reclaimed only when their recorded process is no longer running. Recovery removes old orphaned temporary files and never promotes incomplete content. Task bundles are versioned JSON envelopes with a SHA-256 integrity check, a 1 MiB import limit, schema validation, and no-overwrite import semantics. The checksum detects accidental or unsophisticated tampering; it is not an authenticity signature.
+
 ## Provider policy
 
 A model must be enabled, classified as `free_tier`, marked verified, within its verification dates, supported in the requested region, linked to official HTTPS pricing/terms, priced at exactly zero for input and output, and within token limits. Unknown policies are denied. The local catalog is `config/provider-catalog.json` and is gitignored. A future adapter must use the gate before making network requests; the gate itself never calls providers.
