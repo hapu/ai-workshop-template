@@ -435,21 +435,22 @@ class UsageLedger:
         quota_scopes: Mapping[str, str] | None,
     ) -> dict[str, str]:
         supplied = dict(quota_scopes or {})
-        allowed = {"account", "model", "organization", "project"}
+        allowed = {"organization", "project"}
         if any(not isinstance(key, str) or key not in allowed for key in supplied):
-            raise UsageLedgerError("quota_scopes contains an unsupported boundary type")
-        result: dict[str, str] = {}
-        for scope in {quota.scope for quota in policy.quotas}:
-            value = policy.model if scope == "model" else supplied.get(scope)
-            if scope == "account" and value is None:
-                value = account_scope
-            if scope in {"organization", "project"} and value is None:
-                raise ReconciliationRequired(
-                    f"Missing {scope} quota scope binding; provide a non-secret alias before making requests"
-                )
+            raise UsageLedgerError("quota_scopes accepts only organization and project aliases")
+        result: dict[str, str] = {
+            "account": account_scope.strip(),
+            "model": policy.model,
+        }
+        for scope, value in supplied.items():
             if not isinstance(value, str) or not value.strip() or len(value.strip()) > 120:
                 raise UsageLedgerError(f"{scope} quota scope alias must be a non-empty string up to 120 characters")
             result[scope] = value.strip()
+        for scope in {quota.scope for quota in policy.quotas}:
+            if scope in {"organization", "project"} and scope not in result:
+                raise ReconciliationRequired(
+                    f"Missing {scope} quota scope binding; provide a non-secret alias before making requests"
+                )
         return result
 
     @staticmethod
