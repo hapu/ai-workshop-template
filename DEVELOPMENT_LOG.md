@@ -2,6 +2,11 @@
 
 Newest first, with ISO dates. Archive older entries after ~20 entries or 3,000 words.
 
+## 2026-11-22 (OpenRouter key-status refresh)
+- **Change:** Added an opt-in `provider refresh-openrouter-key` command. It performs one authenticated GET using `OPENROUTER_API_KEY`, rejects redirects, caps response size, sanitizes errors, and never retries. It can use a disabled local policy to import the account's daily free-model request counter before model activation. It reports API-key credit and effective-budget remainders as informational metadata only; those monetary values are not ledger-enforced. No inference request or paid usage was made during development.
+- **Verification:** Added mocked tests for request method/URL/auth header, no-redirect transport, missing credentials, sanitized HTTP errors, daily counter validation, and budget parsing. GitHub Actions run [45064179638](https://github.com/hapu/ai-workshop-template/actions/runs/45064179638) passed on Python 3.10–3.13: 107 unit tests, word-budget checks, and repository smoke tests passed. A later handoff-only update is included in PR #10; its CI rerun is pending.
+- **Limitations:** The endpoint does not provide per-minute free-model rate limits or upstream model/provider quotas; no model was enabled.
+
 ## 2026-11-22 (OpenRouter adapter foundation)
 - **Change:** Added a standard-library OpenRouter Chat Completions adapter and `provider chat` CLI path. Requests use the exact catalog model ID, disable provider-level fallback, disable retries, avoid logging prompt/key/response bodies on errors, and are invoked only through the shared policy gate and atomic quota ledger. No model was enabled and no live request was made.
 - **Verification:** Adapter tests cover request shape, exact model pinning, disabled fallbacks, response parsing, sanitized HTTP errors, no retries, and reservation-before-network behavior. **Hosted CI:** [run 45061270564](https://github.com/hapu/ai-workshop-template/actions/runs/45061270564) passed on Python 3.10–3.13. All 99 unit tests, word-budget checks, and repository smoke tests passed.

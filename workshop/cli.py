@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
@@ -16,6 +17,11 @@ from .models import TASK_STATUSES, Task
 from .providers.policy import FreeTierGate, PolicyDenied, ProviderCatalogError, ProviderRegistry
 from .providers.base import Message
 from .providers.openrouter import OpenRouterAdapter, ProviderTransportError
+from .providers.openrouter_status import (
+    OpenRouterStatusError,
+    fetch_openrouter_key_status,
+    parse_openrouter_key_status,
+)
 from .providers.runner import execute_with_free_tier_gate
 from .providers.reconciliation import (
     groq_response_headers_to_snapshot,
@@ -131,6 +137,15 @@ def _parser() -> argparse.ArgumentParser:
     openrouter.add_argument("--snapshot-id", default=None)
     openrouter.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
     openrouter.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
+
+    refresh = provider_commands.add_parser(
+        "refresh-openrouter-key",
+        help="fetch current OpenRouter key quotas (one authenticated GET; no inference)",
+    )
+    refresh.add_argument("--model", required=True, help="model policy whose daily request quota matches the account")
+    refresh.add_argument("--account-scope", required=True, help="non-secret alias for this OpenRouter account")
+    refresh.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
+    refresh.add_argument("--ledger", type=Path, default=Path(".workshop/provider-usage.sqlite3"))
 
     groq = provider_commands.add_parser(
         "reconcile-groq-headers",
@@ -336,6 +351,49 @@ def _run_provider(args: argparse.Namespace) -> int:
         print(f"Captured at: {snapshot.captured_at_text()}")
         print(f"Quota entries imported: {len(snapshot.quotas)}")
         print("No API request was made.")
+        return 0
+
+    if args.provider_command == "refresh-openrouter-key":
+        try:
+            policy = next(
+                (item for item in registry.list_models()
+                 if item.provider == "openrouter" and item.model == args.model),
+                None,
+            )
+            if policy is None:
+                raise PolicyDenied(
+                    "No matching OpenRouter policy exists; add a disabled local policy with "
+                    "the verified account-scoped requests/86400 quota before refreshing"
+                )
+            if not args.account_scope.strip() or len(args.account_scope.strip()) > 120:
+                raise PolicyDenied("Account scope must be a non-empty local alias up to 120 characters")
+            api_key = os.environ.get("OPENROUTER_API_KEY", "")
+            payload = fetch_openrouter_key_status(api_key)
+            status = parse_openrouter_key_status(payload)
+            captured_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            canonical = openrouter_key_response_to_snapshot(
+                payload, policy, account_scope=args.account_scope,
+                captured_at=captured_at, snapshot_id=uuid.uuid4().hex,
+            )
+            snapshot = UsageLedger(args.ledger).import_snapshot(canonical, policy)
+        except (
+            OSError, UnicodeError, ValueError, UsageLedgerError, PolicyDenied,
+            ProviderCatalogError, OpenRouterStatusError,
+        ) as exc:
+            print(f"OPENROUTER REFRESH FAILED: {exc}", file=sys.stderr)
+            return 2
+        print(f"Imported OpenRouter daily free-model request snapshot: {snapshot.snapshot_id}")
+        print(f"Model policy: {snapshot.model}; account scope: {snapshot.account_scope}")
+        print(f"Captured at: {snapshot.captured_at_text()}")
+        print(
+            f"Daily free-model requests: {status.daily_requests_used}/"
+            f"{status.daily_requests_limit} used; {status.daily_requests_remaining} remaining"
+        )
+        print(f"API-key credit limit remaining: {status.key_credit_remaining}")
+        print(f"Effective budget remaining (USD): {status.effective_budget_remaining}")
+        print(f"Applicable budget entries returned: {status.budget_count}")
+        print("This refresh does not report per-minute/model-provider quotas or prove free-tier eligibility.")
+        print("One authenticated GET was made; no inference request was made.")
         return 0
 
     if args.provider_command == "reconcile-openrouter-key":
