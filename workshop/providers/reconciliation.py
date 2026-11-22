@@ -103,6 +103,7 @@ class SnapshotQuota:
     metric: str
     window_seconds: int
     scope: str
+    scope_id: str
     used: int
     limit: int
     reset_at: float
@@ -172,7 +173,7 @@ class ExternalQuotaSnapshot:
         if not isinstance(raw_quotas, list) or not raw_quotas:
             raise SnapshotError("Snapshot must contain at least one quota entry")
         parsed_quotas: list[SnapshotQuota] = []
-        seen: set[tuple[str, int, str]] = set()
+        seen: set[tuple[str, int, str, str]] = set()
         for item in raw_quotas:
             if not isinstance(item, dict):
                 raise SnapshotError("Every snapshot quota entry must be an object")
@@ -192,6 +193,13 @@ class ExternalQuotaSnapshot:
             if len(matching) != 1:
                 raise SnapshotError(f"Snapshot quota {metric}/{window}s/{scope} is not in the selected policy")
             policy_quota = matching[0]
+            scope_id = item.get("scope_id")
+            if scope_id is None:
+                if scope in {"organization", "project"}:
+                    raise SnapshotError(f"Snapshot quota {metric}/{window}s/{scope} requires scope_id")
+                scope_id = account_scope.strip() if scope == "account" else policy.model
+            if not isinstance(scope_id, str) or not scope_id.strip() or len(scope_id.strip()) > 120:
+                raise SnapshotError("Quota scope_id must be a non-empty local alias up to 120 characters")
             if "limit" not in item or isinstance(item["limit"], bool) or not isinstance(item["limit"], int):
                 raise SnapshotError("Snapshot quota limit must be an integer")
             if item["limit"] != policy_quota.limit:
@@ -202,7 +210,7 @@ class ExternalQuotaSnapshot:
             used = item["used"]
             if isinstance(used, bool) or not isinstance(used, int) or used < 0:
                 raise SnapshotError("Snapshot used value must be a non-negative integer")
-            key = (metric, window, scope)
+            key = (metric, window, scope, scope_id.strip())
             if key in seen:
                 raise SnapshotError(f"Duplicate snapshot quota entry: {key}")
             seen.add(key)
@@ -210,7 +218,7 @@ class ExternalQuotaSnapshot:
             if reset_at <= captured_at or reset_at > captured_at + window:
                 raise SnapshotError("reset_at must be after capture and within the quota window")
             parsed_quotas.append(
-                SnapshotQuota(metric, window, scope, used, item["limit"], reset_at)
+                SnapshotQuota(metric, window, scope, scope_id.strip(), used, item["limit"], reset_at)
             )
 
         return cls(
