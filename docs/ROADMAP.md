@@ -29,7 +29,8 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [x] Combine imported provider usage with later local reservations without double-counting.
 - [x] Convert the OpenRouter key endpoint's daily free-model counter into a snapshot.
 - [x] Research current provider free-tier status and document official sources.
-- [ ] Add authenticated provider quota refresh for each supported quota dimension.
+- [x] Add authenticated OpenRouter key-status refresh for the documented daily free-model request counter.
+- [ ] Add authenticated refresh for other provider-specific quota dimensions where official APIs expose them.
 - [ ] Verify current provider/model terms and account-level quotas before adding approved entries.
 - [x] Add a minimal OpenRouter Chat Completions adapter that uses the shared runner.
 - [ ] Reconcile usage from other devices and browser/API tools before enabling adapters.
