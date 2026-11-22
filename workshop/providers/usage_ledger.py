@@ -276,6 +276,7 @@ class UsageLedger:
                 db.execute("BEGIN IMMEDIATE")
                 # Policy windows are capped at one year; older rows are irrelevant.
                 db.execute("DELETE FROM usage_events WHERE reserved_at < ?", (timestamp - 365 * 86400,))
+                db.execute("DELETE FROM usage_event_scopes WHERE request_id NOT IN (SELECT request_id FROM usage_events)")
                 if db.execute("SELECT 1 FROM usage_events WHERE request_id = ?", (rid,)).fetchone():
                     raise UsageLedgerError("This request_id already has a quota reservation; do not send twice")
                 statuses = self._status(
