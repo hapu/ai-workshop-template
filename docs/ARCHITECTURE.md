@@ -14,8 +14,8 @@ A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded
 - `workshop/handoff.py` - Markdown handoffs with checkpoint state.
 - `workshop/providers/base.py` - provider-neutral message, response, and adapter protocol.
 - `workshop/providers/policy.py` - strict catalog parsing and fail-closed free-tier preflight, including quota-window definitions.
-- `workshop/providers/reconciliation.py` - validation and normalization of dashboard/API quota snapshots.
-- `workshop/providers/usage_ledger.py` - SQLite external snapshots plus atomic multi-window local reservations.
+- `workshop/providers/reconciliation.py` - validation and normalization of dashboard/API snapshots, including saved OpenRouter and Groq evidence converters.
+- `workshop/providers/usage_ledger.py` - SQLite external snapshots plus atomic multi-window local reservations; combined-token quotas count input plus output reservations.
 - `workshop/providers/runner.py` - the only supported adapter invocation path; policy check and quota reservation happen before `complete`.
 - `config/provider-catalog.example.json` - empty catalog example; no model is pre-approved.
 - `.workshop/` - local task/context output; ignored by Git.
@@ -32,5 +32,5 @@ Only `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/ARCHITECT
 
 - Python 3.10+; standard library only for the current runtime.
 - No paid usage without explicit user approval; uncertain pricing or eligibility must fail closed.
-- Provider-specific API adapters, provider dashboard reconciliation, and external-account quota synchronization are not implemented yet.
+- Live provider API adapters, automatic authenticated quota refresh, and cross-device quota synchronization are not implemented. Groq header and OpenRouter key-response converters import saved evidence only.
 - Keep the runtime usable on a low-memory Chromebook; avoid Docker, local LLMs, and heavy databases.
