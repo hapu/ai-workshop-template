@@ -75,7 +75,7 @@ class UsageReservation:
 
 _COLUMNS = {
     "requests": "requests",
-    "tokens": "(e.input_tokens + e.output_tokens)",
+    "tokens": "(input_tokens + output_tokens)",
     "input_tokens": "input_tokens",
     "output_tokens": "output_tokens",
     "neurons": "neurons",
@@ -362,7 +362,7 @@ class UsageLedger:
                     )
                 local_start = now - quota.window_seconds
                 row = db.execute(
-                    f"""SELECT COALESCE(SUM(e.{column}), 0)
+                    f"""SELECT COALESCE(SUM({column}), 0)
                         FROM usage_events e JOIN usage_event_scopes s ON s.request_id = e.request_id
                         WHERE e.provider = ? AND s.scope = ? AND s.scope_id = ?
                           AND e.reserved_at >= ? AND e.reserved_at <= ?""",
