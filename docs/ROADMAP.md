@@ -3,31 +3,27 @@
 The master template is upgraded incrementally. A checked box means the behavior exists and has been verified; planned work remains unchecked.
 
 ## Phase 1: Repository foundation
+- [x] Add dependency-free Python CLI, task storage, handoffs, unit tests, and CI.
 - [x] Resolve the README/license mismatch by documenting the existing GPL-3.0 license.
-- [x] Add a dependency-free Python CLI entry point.
-- [x] Add local JSON task storage with validation and atomic writes.
-- [x] Generate portable Markdown handoffs from saved task state.
-- [x] Add unit tests and run them from the smoke test.
-- [x] Add continuous integration for supported Python versions.
 
 ## Phase 2: Reliable task and context management
-- [x] Add resumable checkpoints to task records with backward-compatible loading.
+- [x] Add resumable checkpoints with backward-compatible task loading.
 - [x] Add task resume and checkpoint CLI commands.
 - [x] Add allowlisted context loading with per-file and aggregate word limits.
 - [x] Reject context symlinks that resolve outside the project root.
 - [x] Include checkpoint state in generated handoffs.
-- [ ] Add safe task bundle import/export.
-- [ ] Add stronger interrupted-write and recovery tests.
+- [ ] Add safe task bundle import/export and interrupted-write recovery tests.
 
-## Phase 3: Provider adapters and routing
-- [ ] Define a common provider request/response interface.
-- [ ] Add provider-specific adapters behind optional dependencies.
-- [ ] Implement a hard free-tier eligibility and spending gate.
-- [ ] Add model routing by role, rate-limit handling, and safe fallback.
-- [ ] Verify model availability and quotas from official sources; record dates.
+## Phase 3: Provider contracts and cost safety
+- [x] Define a provider-neutral request/response protocol.
+- [x] Add an explicit local model-policy catalog with an empty-by-default allowlist.
+- [x] Implement a fail-closed preflight for free-tier, zero-price, dates, HTTPS sources, region, and token limits.
+- [x] Add CLI commands to list policies and preflight a request without network access.
+- [ ] Verify current provider/model terms and add only individually verified entries.
+- [ ] Add provider adapters that call the gate before every request.
+- [ ] Add rate-limit handling, measured fallback, and usage accounting.
 
 ## Phase 4: Browser assistant interoperability
-- [ ] Standardize browser-ready handoff prompts and bounded context packaging.
 - [ ] Import assistant responses and proposed file changes safely.
 - [ ] Preserve context and provenance between API and browser sessions.
 - [ ] Add manual fallback instructions when API quotas are exhausted.
@@ -40,5 +36,5 @@ The master template is upgraded incrementally. A checked box means the behavior 
 
 ## Phase 6: Monitoring and maintenance
 - [ ] Add quota and usage reporting without storing API secrets.
-- [ ] Add scheduled provider re-verification (default: every 90 days).
+- [ ] Add scheduled provider re-verification.
 - [ ] Add end-to-end tests for routing, free-only enforcement, and recovery.

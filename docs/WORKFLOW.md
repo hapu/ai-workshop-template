@@ -12,9 +12,12 @@
 1. Add discrete steps with `python3 -m workshop task checkpoint add TASK_ID "Step title"`.
 2. Complete steps with `python3 -m workshop task checkpoint complete TASK_ID CHECKPOINT_ID`; add findings with `python3 -m workshop task note`.
 3. Make one coherent change at a time, small enough to review.
-4. Run `python3 -m unittest discover -s tests/unit -v` and `bash scripts/check-words.sh && bash tests/smoke.sh` after code or documentation changes.
-5. Update docs when behavior, setup, or decisions change.
-6. Never overwrite another device's uncommitted work. Use separate branches for simultaneous changes.
+4. Before any future inference adapter sends a request, run the provider preflight for the exact provider, model, estimated token counts, and region. A denial means do not send the request.
+5. Do not infer a free tier from a model name or provider reputation. Add catalog entries only after verifying official pricing, terms, model limits, account eligibility, and region.
+6. Do not enable live adapters until remaining free quota is accounted for and provider-side spending safeguards are configured where available.
+7. Run `python3 -m unittest discover -s tests/unit -v` and `bash scripts/check-words.sh && bash tests/smoke.sh` after code or documentation changes.
+8. Update docs when behavior, setup, or decisions change.
+9. Never overwrite another device's uncommitted work. Use separate branches for simultaneous changes.
 
 ## End
 1. Export a handoff with `python3 -m workshop task handoff TASK_ID --output .workshop/handoff.md`.

@@ -1,18 +1,17 @@
 # Development Log
 
-Newest first, with ISO dates. Archive entries older than the last ~20 once this passes 3,000 words into a separate archive file.
+Newest first, with ISO dates. Archive older entries after ~20 entries or 3,000 words.
 
 ## 2026-11-22
-- **Change:** Added bounded project-context loading with an allowlist, per-file and aggregate word limits, and symlink containment checks. Added backward-compatible task checkpoints, resume commands, and checkpoint-aware handoffs. Expanded unit tests and documentation.
-- **Checks / result:** 23/23 unit tests passed locally; CLI version and doctor checks passed; word budgets, shell syntax, local Markdown links, and the staged smoke test passed. GitHub Actions run will verify supported Python versions after push.
-- **Follow-up:** Add safe task bundle import/export and stronger interrupted-write recovery tests.
+- **Change:** Added the provider-neutral adapter protocol and a local, empty-by-default model catalog. Added a fail-closed free-tier preflight for verification status/dates, HTTPS source and terms links, explicit region eligibility, exactly-zero input/output pricing, and token limits. Added provider list/preflight CLI commands; no live API adapters or model approvals were added.
+- **Checks / result:** 35/35 unit tests passed locally. CLI, word-budget, shell syntax, and staged smoke checks passed. GitHub Actions will verify supported Python versions after push.
+- **Follow-up:** Verify current official provider terms and only then add the first provider/model entry and adapter. Add quota accounting before enabling live requests.
+
+## 2026-11-22 (earlier)
+- **Change:** Added bounded project-context loading with an allowlist, per-file and aggregate word limits, and symlink containment checks. Added backward-compatible task checkpoints, resume commands, and checkpoint-aware handoffs.
+- **Checks / result:** 23/23 unit tests passed locally and GitHub Actions passed on Python 3.10–3.13.
+- **Follow-up:** Define provider interfaces and enforce a fail-closed spending gate.
 
 ## 2026-11-21
-- **Change:** Added a dependency-free Python task CLI, JSON-backed task store, status and note commands, Markdown handoff generation, unit tests, GitHub Actions CI, and updated architecture/roadmap documentation. Corrected the README license identifier to match the existing GPL-3.0 license.
-- **Checks / result:** Nine unit tests, CLI startup/diagnostic checks, word-budget checks, shell syntax checks, and the smoke test passed in a staged repository fixture.
-- **Follow-up:** Add reliable task checkpoints and context management.
-
-## YYYY-MM-DD
-- Change or experiment:
-- Checks / result:
-- Follow-up:
+- **Change:** Added a dependency-free Python task CLI, JSON-backed task store, status and note commands, Markdown handoff generation, unit tests, GitHub Actions CI, and corrected the README license reference to GPL-3.0.
+- **Checks / result:** Nine unit tests and repository checks passed.

@@ -10,13 +10,14 @@ bad() { echo "FAIL  $1"; fail=1; }
 
 required="README.md WORKSHOP.md AGENTS.md PROJECT_CONTEXT.md HANDOFF.md TODO.md
 DECISIONS.md DEVELOPMENT_LOG.md LICENSE
-docs/ARCHITECTURE.md docs/NEW_PROJECT.md docs/PROVIDERS.md
-docs/ROADMAP.md docs/SECURITY.md docs/WORKFLOW.md
-config/examples/env.example scripts/check-words.sh tests/smoke.sh
+config/provider-catalog.example.json config/examples/env.example
+scripts/check-words.sh tests/smoke.sh
 workshop/__init__.py workshop/__main__.py workshop/cli.py
-workshop/models.py workshop/task_store.py workshop/handoff.py
-workshop/context_manager.py tests/unit/test_task_store.py
-tests/unit/test_context_manager.py tests/unit/test_task_checkpoints.py"
+workshop/models.py workshop/task_store.py workshop/handoff.py workshop/context_manager.py
+workshop/providers/__init__.py workshop/providers/base.py workshop/providers/policy.py
+tests/unit/test_task_store.py tests/unit/test_context_manager.py
+ tests/unit/test_task_checkpoints.py tests/unit/test_provider_policy.py
+docs/ARCHITECTURE.md docs/NEW_PROJECT.md docs/PROVIDERS.md docs/ROADMAP.md docs/SECURITY.md docs/WORKFLOW.md"
 
 for path in $required; do
   if [ -s "$path" ]; then ok "$path"; else bad "$path (missing or empty)"; fi

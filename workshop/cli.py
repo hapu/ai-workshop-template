@@ -10,6 +10,7 @@ from . import __version__
 from .context_manager import ContextError, ContextManager
 from .handoff import render_handoff
 from .models import TASK_STATUSES, Task
+from .providers.policy import FreeTierGate, PolicyDenied, ProviderCatalogError, ProviderRegistry
 from .task_store import TaskStore, TaskStoreError
 
 
@@ -40,7 +41,7 @@ def _parser() -> argparse.ArgumentParser:
     handoff = task_commands.add_parser("handoff", help="render a portable assistant handoff")
     handoff.add_argument("task_id")
     handoff.add_argument("--output", type=Path)
-    resume = task_commands.add_parser("resume", help="show saved state and remaining checkpoints")
+    resume = task_commands.add_parser("resume", help="show the saved state and remaining checkpoints")
     resume.add_argument("task_id")
 
     checkpoint = task_commands.add_parser("checkpoint", help="manage task checkpoints")
@@ -56,12 +57,24 @@ def _parser() -> argparse.ArgumentParser:
 
     context = commands.add_parser("context", help="build a bounded project-context bundle")
     context_commands = context.add_subparsers(dest="context_command", required=True)
-    build = context_commands.add_parser("build", help="load known context files in priority order")
+    build = context_commands.add_parser("build", help="load the known context files in priority order")
     build.add_argument("--project", default=".")
     build.add_argument("--max-words", type=int, default=2500)
     build.add_argument("--output", type=Path)
 
-    commands.add_parser("doctor", help="check local Python and workspace environment")
+    provider = commands.add_parser("provider", help="inspect provider policies and run a zero-cost preflight")
+    provider_commands = provider.add_subparsers(dest="provider_command", required=True)
+    provider_list = provider_commands.add_parser("list", help="list locally verified model policies")
+    provider_list.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
+    preflight = provider_commands.add_parser("preflight", help="check a model request without making a network call")
+    preflight.add_argument("provider")
+    preflight.add_argument("model")
+    preflight.add_argument("--input-tokens", type=int, required=True)
+    preflight.add_argument("--output-tokens", type=int, required=True)
+    preflight.add_argument("--region", required=True)
+    preflight.add_argument("--catalog", type=Path, default=Path("config/provider-catalog.json"))
+
+    commands.add_parser("doctor", help="check the local Python and workspace environment")
     return parser
 
 
@@ -166,6 +179,36 @@ def _run_context(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_provider(args: argparse.Namespace) -> int:
+    registry = ProviderRegistry.load(args.catalog)
+    if args.provider_command == "list":
+        policies = registry.list_models()
+        if not policies:
+            print("No model policies are configured. Requests will be denied by default.")
+            print("Verify official provider terms before adding entries to config/provider-catalog.json.")
+            return 0
+        for policy in policies:
+            state = "enabled" if policy.enabled else "disabled"
+            print(f"{policy.provider}/{policy.model}: {policy.access_type}, {policy.verification_status}, {state}")
+        return 0
+    try:
+        approval = FreeTierGate(registry).authorize(
+            provider=args.provider,
+            model=args.model,
+            input_tokens=args.input_tokens,
+            output_tokens=args.output_tokens,
+            region=args.region,
+        )
+    except PolicyDenied as exc:
+        print(f"DENIED: {exc}", file=sys.stderr)
+        return 2
+    print(f"APPROVED: {approval.provider}/{approval.model}")
+    print(f"Region: {approval.region}")
+    print(f"Estimated input/output tokens: {approval.input_tokens}/{approval.output_tokens}")
+    print("Verified model costs: $0.00; no network request was made.")
+    return 0
+
+
 def _doctor(home: str) -> int:
     version = sys.version_info
     print(f"Python: {version.major}.{version.minor}.{version.micro}")
@@ -194,8 +237,10 @@ def main(argv: list[str] | None = None) -> int:
             return _doctor(args.home)
         if args.command == "context":
             return _run_context(args)
+        if args.command == "provider":
+            return _run_provider(args)
         return _run_task(args, TaskStore(args.home))
-    except (TaskStoreError, ContextError) as exc:
+    except (TaskStoreError, ContextError, ProviderCatalogError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     except OSError as exc:
