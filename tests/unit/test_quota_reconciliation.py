@@ -12,7 +12,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from workshop.providers.policy import ModelPolicy
-from workshop.providers.reconciliation import SnapshotError, openrouter_key_response_to_snapshot
+from workshop.providers.reconciliation import (
+    SnapshotError,
+    groq_response_headers_to_snapshot,
+    openrouter_key_response_to_snapshot,
+)
 from workshop.providers.usage_ledger import (
     ReconciliationRequired,
     UsageLedger,
@@ -302,6 +306,155 @@ class QuotaReconciliationTests(unittest.TestCase):
             status = UsageLedger(ledger).usage(policy, account_scope="demo-account")
             self.assertTrue(status[0].reconciled)
             self.assertEqual(status[0].snapshot_used, 12)
+
+
+    @staticmethod
+    def groq_policy() -> ModelPolicy:
+        return ModelPolicy.from_dict({
+            "provider": "groq",
+            "model": "example/groq-model",
+            "enabled": True,
+            "access_type": "free_tier",
+            "verification_status": "verified",
+            "verified_at": "2026-11-20",
+            "expires_at": "2027-02-18",
+            "source_url": "https://console.groq.com/docs/rate-limits",
+            "terms_url": "https://groq.com/terms",
+            "regions": ["MX"],
+            "input_cost_usd_per_million_tokens": 0,
+            "output_cost_usd_per_million_tokens": 0,
+            "max_input_tokens": 5000,
+            "max_output_tokens": 1000,
+            "quotas": [
+                {"metric": "requests", "window_seconds": 86400, "limit": 100,
+                 "scope": "account", "snapshot_max_age_seconds": 300},
+                {"metric": "tokens", "window_seconds": 60, "limit": 50000,
+                 "scope": "account", "snapshot_max_age_seconds": 30},
+            ],
+        })
+
+    def test_groq_headers_convert_rpd_and_combined_tpm(self) -> None:
+        policy = self.groq_policy()
+        headers = {
+            "X-RateLimit-Limit-Requests": "100",
+            "X-RateLimit-Remaining-Requests": "81",
+            "X-RateLimit-Reset-Requests": "23h59m59.5s",
+            "x-ratelimit-limit-tokens": "50000",
+            "x-ratelimit-remaining-tokens": "49000",
+            "x-ratelimit-reset-tokens": "59.1s",
+        }
+        canonical = groq_response_headers_to_snapshot(
+            headers, policy, account_scope="groq-org",
+            captured_at=iso(1000), snapshot_id="groq-header-test",
+        )
+        self.assertEqual(canonical["source_type"], "response_headers")
+        self.assertEqual(canonical["source_url"], "https://console.groq.com/docs/rate-limits")
+        self.assertEqual(
+            {(item["metric"], item["window_seconds"], item["used"]) for item in canonical["quotas"]},
+            {("requests", 86400, 19), ("tokens", 60, 1000)},
+        )
+        self.ledger.import_snapshot(canonical, policy, now=1001)
+        self.ledger.reserve(
+            policy, account_scope="groq-org", input_tokens=30,
+            output_tokens=70, now=1002,
+        )
+        statuses = self.ledger.usage(policy, account_scope="groq-org", now=1003)
+        by_metric = {item.metric: item for item in statuses}
+        self.assertEqual(by_metric["requests"].used, 20)
+        self.assertEqual(by_metric["tokens"].snapshot_used, 1000)
+        self.assertEqual(by_metric["tokens"].local_used, 100)
+        self.assertEqual(by_metric["tokens"].used, 1100)
+
+    def test_groq_headers_require_complete_header_groups(self) -> None:
+        policy = self.groq_policy()
+        headers = {
+            "x-ratelimit-limit-requests": "100",
+        }
+        with self.assertRaisesRegex(SnapshotError, "missing required headers"):
+            groq_response_headers_to_snapshot(
+                headers, policy, account_scope="groq-org",
+                captured_at=iso(1000), snapshot_id="groq-incomplete",
+            )
+
+    def test_groq_headers_must_match_verified_limits(self) -> None:
+        policy = self.groq_policy()
+        headers = {
+            "x-ratelimit-limit-requests": "200",
+            "x-ratelimit-remaining-requests": "190",
+            "x-ratelimit-reset-requests": "1h",
+        }
+        with self.assertRaisesRegex(SnapshotError, "does not match the policy limit"):
+            groq_response_headers_to_snapshot(
+                headers, policy, account_scope="groq-org",
+                captured_at=iso(1000), snapshot_id="groq-wrong-limit",
+            )
+
+    def test_groq_headers_reject_credentials_and_invalid_resets(self) -> None:
+        policy = self.groq_policy()
+        with self.assertRaisesRegex(SnapshotError, "credentials"):
+            groq_response_headers_to_snapshot(
+                {"authorization": "Bearer never-store"}, policy,
+                account_scope="groq-org", captured_at=iso(1000),
+                snapshot_id="groq-secret",
+            )
+        headers = {
+            "x-ratelimit-limit-requests": "100",
+            "x-ratelimit-remaining-requests": "90",
+            "x-ratelimit-reset-requests": "soon-ish",
+        }
+        with self.assertRaisesRegex(SnapshotError, "duration"):
+            groq_response_headers_to_snapshot(
+                headers, policy, account_scope="groq-org",
+                captured_at=iso(1000), snapshot_id="groq-bad-reset",
+            )
+
+    def test_cli_reconcile_groq_headers_without_network_access(self) -> None:
+        with tempfile.TemporaryDirectory() as work_dir:
+            root = Path(work_dir)
+            catalog = root / "catalog.json"
+            headers_path = root / "groq-headers.json"
+            ledger_path = root / "usage.sqlite3"
+            policy = self.groq_policy()
+            raw_policy = {
+                "provider": policy.provider, "model": policy.model, "enabled": True,
+                "access_type": "free_tier", "verification_status": "verified",
+                "verified_at": "2026-11-20", "expires_at": "2027-02-18",
+                "source_url": "https://console.groq.com/docs/rate-limits",
+                "terms_url": "https://groq.com/terms", "regions": ["MX"],
+                "input_cost_usd_per_million_tokens": 0,
+                "output_cost_usd_per_million_tokens": 0,
+                "max_input_tokens": 5000, "max_output_tokens": 1000,
+                "quotas": [
+                    {"metric": "requests", "window_seconds": 86400, "limit": 100,
+                     "scope": "account", "snapshot_max_age_seconds": 300},
+                    {"metric": "tokens", "window_seconds": 60, "limit": 50000,
+                     "scope": "account", "snapshot_max_age_seconds": 30},
+                ],
+            }
+            headers_path.write_text(json.dumps({
+                "x-ratelimit-limit-requests": "100",
+                "x-ratelimit-remaining-requests": "90",
+                "x-ratelimit-reset-requests": "23h",
+                "x-ratelimit-limit-tokens": "50000",
+                "x-ratelimit-remaining-tokens": "49000",
+                "x-ratelimit-reset-tokens": "59s",
+            }), encoding="utf-8")
+            catalog.write_text(json.dumps({"schema_version": 1, "models": [raw_policy]}), encoding="utf-8")
+            captured = iso(time.time() - 1)
+            env = {"PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+            result = subprocess.run(
+                [sys.executable, "-m", "workshop", "provider", "reconcile-groq-headers",
+                 str(headers_path), "--model", policy.model, "--account-scope", "groq-org",
+                 "--captured-at", captured, "--catalog", str(catalog), "--ledger", str(ledger_path)],
+                check=True, capture_output=True, text=True, env={**os.environ, **env},
+            )
+            self.assertIn("Imported Groq response-header snapshot", result.stdout)
+            self.assertIn("requests/86400s", result.stdout)
+            self.assertIn("tokens/60s", result.stdout)
+            self.assertIn("No API request was made", result.stdout)
+            statuses = UsageLedger(ledger_path).usage(policy, account_scope="groq-org")
+            self.assertEqual({item.metric: item.snapshot_used for item in statuses},
+                             {"requests": 10, "tokens": 1000})
 
 
 if __name__ == "__main__":
