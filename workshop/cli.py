@@ -50,6 +50,13 @@ def _parser() -> argparse.ArgumentParser:
     handoff.add_argument("--output", type=Path)
     resume = task_commands.add_parser("resume", help="show the saved state and remaining checkpoints")
     resume.add_argument("task_id")
+    export_task = task_commands.add_parser("export", help="export a checksummed task bundle")
+    export_task.add_argument("task_id")
+    export_task.add_argument("--output", type=Path, required=True)
+    import_task = task_commands.add_parser("import", help="import a task bundle without overwriting")
+    import_task.add_argument("bundle", type=Path)
+    recover_task = task_commands.add_parser("recover", help="remove abandoned temporary task files")
+    recover_task.add_argument("--older-than-seconds", type=int, default=86400)
 
     checkpoint = task_commands.add_parser("checkpoint", help="manage task checkpoints")
     checkpoint_commands = checkpoint.add_subparsers(dest="checkpoint_command", required=True)
@@ -178,6 +185,18 @@ def _run_task(args: argparse.Namespace, store: TaskStore) -> int:
             print(f"Wrote handoff: {args.output}")
         else:
             sys.stdout.write(markdown)
+        return 0
+    if args.task_command == "export":
+        output = store.export_bundle(args.task_id, args.output)
+        print(f"Exported task {args.task_id}: {output}")
+        return 0
+    if args.task_command == "import":
+        item = store.import_bundle(args.bundle)
+        print(f"Imported task {item.id}: {item.title}")
+        return 0
+    if args.task_command == "recover":
+        removed = store.recover(older_than_seconds=args.older_than_seconds)
+        print(f"Removed {removed} abandoned temporary file(s).")
         return 0
     if args.task_command == "resume":
         item = store.get(args.task_id)

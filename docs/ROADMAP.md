@@ -12,7 +12,9 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [x] Add allowlisted context loading with per-file and aggregate word limits.
 - [x] Reject context symlinks that resolve outside the project root.
 - [x] Include checkpoint state in generated handoffs.
-- [ ] Add safe task bundle import/export and interrupted-write recovery tests.
+- [x] Add unique atomic task writes and per-task writer locking.
+- [x] Add abandoned temporary-file recovery and crash-safety tests.
+- [x] Add versioned, checksummed task bundle import/export with no-overwrite imports.
 
 ## Phase 3: Provider contracts and cost safety
 - [x] Define a provider-neutral request/response protocol.

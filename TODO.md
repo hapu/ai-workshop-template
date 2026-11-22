@@ -6,7 +6,8 @@ Template-maintenance backlog. Keep one active task under Now and make each item 
 - [ ] Verify the user's actual provider project/account quotas and reconcile usage outside this local ledger before enabling the first adapter.
 
 ## Next
-- [ ] Add safe task bundle import/export and interrupted-write recovery tests.
+- [x] Add atomic task writes, per-task concurrent-writer protection, and interrupted-write recovery.
+- [x] Add checksummed task bundle import/export with strict validation and no-overwrite imports.
 - [x] Add local atomic request/token quota reservations and adapter runner.
 - [x] Import external provider quota snapshots and combine them with subsequent local reservations.
 - [x] Import Groq's documented RPD and combined TPM response headers; account for combined token reservations.
