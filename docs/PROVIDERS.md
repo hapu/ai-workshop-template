@@ -71,6 +71,15 @@ The local policy gate does not make network calls. It also cannot prove that a c
 
 `provider reconcile SNAPSHOT.json` imports a validated snapshot created from a provider dashboard/API or a manually recorded rate-limit header. The example format is `config/provider-quota-snapshot.example.json`. A snapshot includes provider/model, non-secret account scope, source URL, source type, capture time, the reported used/limit values, and the provider's exact reset time. The importer rejects credential-like fields, non-HTTPS sources, future captures, unknown quota windows, limit mismatches, and invalid reset times. Partial snapshots are accepted for incremental reconciliation, but a request remains blocked until every quota in its policy has a current matching snapshot.
 
+For a live, read-only refresh, set `OPENROUTER_API_KEY` in the environment and run:
+
+```bash
+python3 -m workshop provider refresh-openrouter-key \
+  --model "exact/model-id:free" --account-scope openrouter-personal
+```
+
+This command performs exactly one authenticated HTTPS GET to `/api/v1/key`, uses the environment variable only, rejects redirects, caps the response at 1 MiB, sanitizes errors, and does not retry. It can use a disabled local policy so quota evidence can be collected before model activation. The policy must define exactly one account-scoped `requests/86400` quota whose limit matches the API response. The command imports only that daily free-model request counter into the quota ledger. It also displays the API-key credit-limit remainder and effective budget remainder returned by the endpoint; those monetary fields are informational and are not represented as quota-ledger metrics or proof that billing is disabled. It does not report the free-model per-minute limit, model/provider-specific limits, or all upstream provider quotas. It does not establish free-tier eligibility. No inference request is made.
+
 For OpenRouter, save the JSON body from the official `GET https://openrouter.ai/api/v1/key` endpoint, then run:
 
 ```bash
