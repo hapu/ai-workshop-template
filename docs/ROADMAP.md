@@ -19,7 +19,8 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [x] Add an explicit local model-policy catalog with an empty-by-default allowlist.
 - [x] Implement a fail-closed preflight for free-tier, zero-price, dates, HTTPS sources, region, and token limits.
 - [x] Add CLI commands to list policies, preflight quota, and show local usage without network access.
-- [x] Add SQLite quota ledger with atomic concurrent reservations and account/model scopes.
+- [x] Add SQLite quota ledger with atomic concurrent reservations across account, organization, project, and model boundaries.
+- [x] Migrate legacy quota snapshots and reservations to the independently scoped SQLite schema.
 - [x] Require Neuron quota definitions for nonzero Neuron-metered requests.
 - [x] Add a shared provider runner that reserves usage before invoking an adapter.
 - [x] Import provider/dashboard quota snapshots and require fresh data for every quota window.
