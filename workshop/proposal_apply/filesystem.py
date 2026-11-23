@@ -27,7 +27,7 @@ def require_posix_support() -> None:
     """Fail closed unless the required POSIX descriptor-relative APIs exist."""
     if os.name != "posix":
         raise FilesystemSafetyError("Proposal application requires a POSIX platform")
-    if not all(hasattr(os, flag) for flag in ("O_DIRECTORY", "O_NOFOLLOW", "O_CLOEXEC")):
+    if not all(hasattr(os, flag) for flag in ("O_DIRECTORY", "O_NOFOLLOW", "O_CLOEXEC", "O_NONBLOCK")):
         raise FilesystemSafetyError("Required POSIX open flags are unavailable")
     if any(function not in os.supports_dir_fd for function in _REQUIRED_DIR_FD_FUNCTIONS):
         raise FilesystemSafetyError("Required descriptor-relative filesystem operations are unavailable")
