@@ -8,7 +8,6 @@ from __future__ import annotations
 import os
 import stat
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Iterable
 
 _REQUIRED_DIR_FD_FUNCTIONS = (os.open, os.stat, os.unlink, os.rename, os.link)
@@ -136,6 +135,15 @@ def open_regular_file_at(parent_fd: int, name: str) -> int:
     """Open an existing single-link regular file read-only, without following links."""
     name = _component(name)
     try:
+        before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError as exc:
+        raise FilesystemSafetyError(f"Cannot inspect target file safely: {name}") from exc
+    if not stat.S_ISREG(before.st_mode):
+        raise FilesystemSafetyError(f"Target is not a regular file: {name}")
+    if before.st_nlink != 1:
+        raise FilesystemSafetyError(f"Hard-linked targets are not supported: {name}")
+
+    try:
         descriptor = os.open(
             name,
             os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK,
@@ -145,8 +153,9 @@ def open_regular_file_at(parent_fd: int, name: str) -> int:
         raise FilesystemSafetyError(f"Cannot safely open target file: {name}") from exc
     try:
         info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode):
-            raise FilesystemSafetyError(f"Target is not a regular file: {name}")
+        if (not stat.S_ISREG(info.st_mode) or info.st_dev != before.st_dev
+                or info.st_ino != before.st_ino):
+            raise FilesystemSafetyError(f"Target changed while it was being opened: {name}")
         if info.st_nlink != 1:
             raise FilesystemSafetyError(f"Hard-linked targets are not supported: {name}")
         return descriptor
