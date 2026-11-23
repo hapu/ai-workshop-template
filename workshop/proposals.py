@@ -62,6 +62,8 @@ def _sha256(data: bytes) -> str:
 def _safe_path(root: Path, raw_path: object) -> tuple[str, Path]:
     if not isinstance(raw_path, str) or not raw_path or len(raw_path) > _MAX_PATH_LENGTH:
         raise ProposalError("Each operation needs a non-empty repository-relative path")
+    if any(ord(char) < 32 or ord(char) == 127 for char in raw_path):
+        raise ProposalError("Paths cannot contain terminal control characters")
     if "\x00" in raw_path or "\\" in raw_path:
         raise ProposalError(f"Invalid path syntax: {raw_path!r}")
     if raw_path.startswith("/") or re.match(r"^[A-Za-z]:", raw_path):
@@ -127,8 +129,9 @@ def parse_proposal(raw: bytes | str) -> tuple[dict[str, Any], tuple[ProposalOper
         raise ProposalError("Unsupported proposal format or version")
     for field in ("source", "created_at"):
         value = payload[field]
-        if not isinstance(value, str) or not value.strip() or len(value) > 200:
-            raise ProposalError(f"{field} must be a non-empty string up to 200 characters")
+        if (not isinstance(value, str) or not value.strip() or len(value) > 200
+                or any(ord(char) < 32 or ord(char) == 127 for char in value)):
+            raise ProposalError(f"{field} must be printable text up to 200 characters")
     entries = payload["operations"]
     if not isinstance(entries, list) or not 1 <= len(entries) <= _MAX_OPERATIONS:
         raise ProposalError("Proposal must contain between 1 and 32 file operations")
@@ -227,6 +230,8 @@ class ProposalStore:
             else:
                 if not exists:
                     raise ProposalError(f"Expected existing file is missing: {operation.path}")
+                if target.stat().st_size > _MAX_FILE_BYTES:
+                    raise ProposalError(f"Existing target exceeds the 64 KiB review limit: {operation.path}")
                 current = target.read_bytes()
                 if _sha256(current) != operation.expected_sha256:
                     raise ProposalError(f"Stale file hash; proposal rejected: {operation.path}")
@@ -268,6 +273,7 @@ class ProposalStore:
             "previews": previews,
             "status": "staged_read_only",
         }
+        record["record_sha256"] = _record_digest(record)
         directory = self.proposals_dir / proposal_id
         _atomic_private_write(directory / "proposal.json", _canonical_json(record))
         return StagedProposal(proposal_id, directory, operations)
@@ -275,19 +281,89 @@ class ProposalStore:
     def preview(self, proposal_id: str) -> str:
         if not isinstance(proposal_id, str) or not _ID.fullmatch(proposal_id):
             raise ProposalError("Invalid proposal ID")
-        record_path = self.proposals_dir / proposal_id / "proposal.json"
+        directory = self.proposals_dir / proposal_id
+        record_path = directory / "proposal.json"
+        if self.proposals_dir.is_symlink() or directory.is_symlink() or record_path.is_symlink():
+            raise ProposalError("Staged proposal path must not contain symlinks")
         try:
             record = json.loads(record_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise ProposalError("Staged proposal not found or unreadable") from exc
-        if record.get("format") != _FORMAT or record.get("version") != _VERSION:
+        if not isinstance(record, dict) or record.get("format") != _FORMAT:
             raise ProposalError("Staged proposal format is invalid")
+        if type(record.get("version")) is not int or record["version"] != _VERSION:
+            raise ProposalError("Staged proposal version is invalid")
+        if record.get("proposal_id") != proposal_id:
+            raise ProposalError("Staged proposal identity does not match its directory")
+        supplied_digest = record.get("record_sha256")
+        if not isinstance(supplied_digest, str) or not hmac.compare_digest(
+            supplied_digest, _record_digest(record)
+        ):
+            raise ProposalError("Staged proposal integrity check failed; do not review or apply it")
+
+        operations = record.get("operations")
+        previews = record.get("previews")
+        if (not isinstance(operations, list) or not 1 <= len(operations) <= _MAX_OPERATIONS
+                or not isinstance(previews, list) or len(previews) != len(operations)):
+            raise ProposalError("Staged proposal contents are malformed")
+
+        stale: list[str] = []
+        for item in operations:
+            if not isinstance(item, dict):
+                raise ProposalError("Staged proposal operation is malformed")
+            op, path, expected = item.get("op"), item.get("path"), item.get("expected_sha256")
+            _, target = _safe_path(self.repository, path)
+            exists = target.exists()
+            if op == "create":
+                if exists:
+                    stale.append(f"{path}: target now exists")
+            elif op in {"update", "delete"}:
+                if not exists or not target.is_file():
+                    stale.append(f"{path}: expected file is now missing")
+                else:
+                    try:
+                        if target.stat().st_size > _MAX_FILE_BYTES:
+                            stale.append(f"{path}: current file exceeds the review size limit")
+                        elif _sha256(target.read_bytes()) != expected:
+                            stale.append(f"{path}: file changed after staging")
+                    except OSError as exc:
+                        stale.append(f"{path}: cannot verify current file ({exc})")
+            else:
+                raise ProposalError("Staged proposal contains an unsupported operation")
+        if stale:
+            details = "; ".join(stale)
+            raise ProposalError(f"Staged proposal is stale; discard and restage it: {details}")
+
         sections = [
             f"Proposal: {proposal_id}",
-            f"Source: {record.get('source', 'unknown')}",
+            f"Source: {_safe_display(str(record.get('source', 'unknown')))}",
             f"Bundle SHA-256: {record.get('bundle_sha256', 'unknown')}",
+            f"Record SHA-256: {supplied_digest}",
             "Status: staged_read_only (repository files were not changed)",
+            "Freshness: current repository files still match the staged preconditions",
         ]
-        for item in record.get("previews", []):
-            sections.extend(["", f"## {item['operation']}: {item['path']}", item["diff"] or "(no textual changes)"])
+        for item in previews:
+            if not isinstance(item, dict) or not all(
+                isinstance(item.get(key), str) for key in ("operation", "path", "diff")
+            ):
+                raise ProposalError("Staged proposal preview is malformed")
+            sections.extend([
+                "",
+                f"## {item['operation']}: {item['path']}",
+                _safe_display(item["diff"]) or "(no textual changes)",
+            ])
         return "\n".join(sections) + "\n"
+
+
+def _record_digest(record: dict[str, Any]) -> str:
+    unsigned = {key: value for key, value in record.items() if key != "record_sha256"}
+    return _sha256(_canonical_json(unsigned))
+
+
+def _safe_display(value: str) -> str:
+    """Escape terminal control characters while preserving ordinary line layout."""
+    return "".join(
+        char if char in {"\n", "\t"} or ord(char) >= 32 and ord(char) != 127
+        else f"\\x{ord(char):02x}"
+        for char in value
+    )
