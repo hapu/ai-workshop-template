@@ -96,6 +96,8 @@ At staging time, record a repository identity containing at least:
 - canonical absolute repository-root path;
 - root directory device and inode values (`st_dev`, `st_ino`).
 
+The current staged-record schema does not yet contain this identity. Add it to a new staged-record format version and include it in the record digest. Keep the incoming proposal-bundle version independent from the staged-record version. Existing staged records without repository identity are not eligible for application; users must restage them after the feature is introduced.
+
 At apply and recovery time, open the root directory and compare its identity with the recorded values. Reject a moved, replaced, or different root. This is a local filesystem identity check, not a cryptographic repository identity.
 
 The repository root must be an existing directory and must not itself be a symlink. The private `.workshop` state directory must be verified separately and must not be reached through a symlink.
@@ -230,7 +232,7 @@ Proposed command:
 python3 -m workshop proposal recover TRANSACTION_ID
 ```
 
-Recovery is a separate operation. It acquires the same locks, validates the journal and repository identity, inventories every target/quarantine/temp object, and prints a recovery preview before asking for an exact transaction-digest-bound confirmation.
+Recovery is a separate operation. It acquires the same locks, validates the journal and repository identity, inventories every target/quarantine/temp object, and prints a recovery preview before asking the user to type the exact line `ROLLBACK TRANSACTION_ID FULL_64_CHARACTER_JOURNAL_SHA256`. The journal digest is recomputed from the canonical journal with its digest field omitted. Non-interactive recovery is rejected. Cleanup after a durably committed transaction may use the same explicit recovery command but must clearly report that it is cleanup-only, not rollback.
 
 Default policy is rollback for any valid incomplete transaction. Do not resume forward application automatically.
 
