@@ -3,7 +3,7 @@
 Prioritized template-maintenance backlog. Keep exactly one active task under **Now**. A checked item belongs in **Completed**, not in an active queue.
 
 ## Now
-- [ ] Review PR #23 and verify stage-1 POSIX filesystem/locking tests on Python 3.10–3.13. Do not begin stage 2 until this gate is accepted.
+- [ ] Review and accept draft PR #23 (stage 1). CI run #83 passes on Python 3.10–3.13. Do not begin stage 2 until this gate is accepted.
 
 ## Next
 - [ ] After stage 1 is accepted, implement the versioned journal format, durable backup/prepared-file creation, and recovery inventory. This stage must not modify repository targets.
