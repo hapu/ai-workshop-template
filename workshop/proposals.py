@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import hmac
 import json
 import os
 import re
