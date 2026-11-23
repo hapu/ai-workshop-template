@@ -133,6 +133,46 @@ class ProposalTests(unittest.TestCase):
                 "expected_sha256": None, "content": "replace",
             }))
 
+    def test_preview_rejects_tampered_staging_record(self) -> None:
+        staged = self.store.stage(bundle({
+            "op": "create", "path": "new.txt", "expected_sha256": None, "content": "safe",
+        }))
+        record_path = staged.directory / "proposal.json"
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record["source"] = "tampered"
+        record_path.write_text(json.dumps(record), encoding="utf-8")
+        with self.assertRaisesRegex(ProposalError, "integrity check failed"):
+            self.store.preview(staged.proposal_id)
+
+    def test_preview_rejects_file_changed_after_staging(self) -> None:
+        target = self.root / "tracked.txt"
+        target.write_text("before", encoding="utf-8")
+        digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        staged = self.store.stage(bundle({
+            "op": "update", "path": "tracked.txt", "expected_sha256": digest,
+            "content": "proposed",
+        }))
+        target.write_text("changed by another process", encoding="utf-8")
+        with self.assertRaisesRegex(ProposalError, "stale"):
+            self.store.preview(staged.proposal_id)
+
+    def test_preview_rejects_create_target_appearing_after_staging(self) -> None:
+        staged = self.store.stage(bundle({
+            "op": "create", "path": "new.txt", "expected_sha256": None, "content": "proposed",
+        }))
+        (self.root / "new.txt").write_text("created elsewhere", encoding="utf-8")
+        with self.assertRaisesRegex(ProposalError, "stale"):
+            self.store.preview(staged.proposal_id)
+
+    def test_preview_escapes_terminal_control_characters(self) -> None:
+        staged = self.store.stage(bundle({
+            "op": "create", "path": "safe.txt", "expected_sha256": None,
+            "content": "visible\x1b[31mhidden",
+        }))
+        preview = self.store.preview(staged.proposal_id)
+        self.assertIn("\\x1b[31m", preview)
+        self.assertNotIn("\x1b[31m", preview)
+
 
 if __name__ == "__main__":
     unittest.main()
