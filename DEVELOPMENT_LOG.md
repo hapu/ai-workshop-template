@@ -1,5 +1,11 @@
 # Development Log
 
+## 2026-11-22 (OpenRouter account tier metadata)
+- **Change:** Parse and display the documented `is_free_tier` boolean from `GET /api/v1/key`. A missing value remains unknown; malformed values are rejected. Documentation clarifies that the flag means whether the user has previously paid for credits, not whether a specific model is eligible or billing safeguards are disabled. No live request or inference was made.
+- **Verification:** Added tests for true, false, missing, and malformed flag values. Hosted CI pending.
+- **Safety:** The refresh remains one authenticated GET, no redirects/retries; no account identifiers, credentials, or model approval are added to tracked files.
+
+
 ## 2026-11-22 (OpenRouter rate-limit diagnostics)
 - **Change:** The adapter now parses bounded HTTP error JSON and documented rate-limit headers, exposing safe status, limit-source, upstream provider code, Retry-After, and free-tier reset details. Response bodies, prompt text, and credentials remain hidden. No automatic retry, provider/model fallback, live request, or model activation was added.
 - **Verification:** Added mocked tests for OpenRouter shared free-tier 429s, upstream-provider 429s, malformed headers, body sanitization, and one-call behavior. Hosted CI is pending.
