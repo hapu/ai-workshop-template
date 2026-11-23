@@ -76,3 +76,8 @@ Newest first, with ISO dates. Archive older entries after ~20 entries or 3,000 w
 - **Change:** Added optional `task_id` and `context_sha256` fields to proposal bundles. Both are strictly validated, preserved in private staged records, included in the staged-record integrity checksum, revalidated at preview, and displayed with the diff. Context content is not copied into the proposal. Updated the README, security/architecture docs, roadmap, TODO, and handoff.
 - **Checks / result:** Hosted CI is pending for this branch; verify the Python 3.10–3.13 matrix before merge.
 - **Follow-up:** Continue keeping proposal import/preview read-only. Design any future explicit apply operation separately.
+
+## 2026-11-23 (proposal provenance merged)
+- **Change:** PR #20 merged after the Python 3.10–3.13 matrix passed. Proposal bundles now support optional validated task IDs and context-bundle SHA-256 provenance; staged records preserve and display both without copying private context contents.
+- **Checks / result:** CI run [45114855292](https://github.com/hapu/ai-workshop-template/actions/runs/45114855292) passed all four Python versions; 130 unit tests passed, including proposal security/provenance cases.
+- **Follow-up:** Keep import and preview read-only. Define and threat-model a separate explicit apply transaction before considering any file-writing command.
