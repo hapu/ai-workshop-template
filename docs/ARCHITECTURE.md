@@ -1,52 +1,46 @@
 # Architecture
 
-This document describes the master template's current executable slice and intended extension points.
+This document describes the current executable slice and intended extension points.
 
 ## Overview
 
-A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded context bundles, and portable handoffs. The provider-policy layer checks whether a model can be proven zero-cost before an adapter sends a request. A minimal OpenRouter adapter is present; the approved model catalog remains empty by default.
+A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded context bundles, and portable handoffs. Provider requests pass through a fail-closed policy gate and local quota ledger. The OpenRouter adapter exists, but the approved model catalog remains empty by default.
 
 ## Current components
 
 - `workshop/cli.py` - task, context, and provider-policy commands.
-- `workshop/models.py` and `workshop/task_store.py` - task/checkpoint models and JSON persistence.
-- `workshop/context_manager.py` - allowlisted context loading, symlink containment, and word budgets.
+- `workshop/models.py`, `task_store.py` - task/checkpoint models and JSON persistence.
+- `workshop/context_manager.py` - allowlisted context, symlink containment, and word budgets.
 - `workshop/handoff.py` - Markdown handoffs with checkpoint state.
 - `workshop/providers/base.py` - provider-neutral message, response, and adapter protocol.
-- `workshop/providers/policy.py` - strict catalog parsing and fail-closed free-tier preflight, including account, organization, project, and model quota boundaries.
-- `workshop/providers/reconciliation.py` - validation and normalization of dashboard/API snapshots, including saved OpenRouter and Groq evidence converters.
-- `workshop/providers/usage_ledger.py` - schema-versioned SQLite snapshots plus atomic reservations mapped to independent quota boundaries; combined-token quotas count input plus output reservations.
-- `workshop/providers/runner.py` - the only supported adapter invocation path; policy check and quota reservation happen before `complete`.
-- `workshop/providers/openrouter.py` - standard-library OpenRouter Chat Completions adapter; no retries, streaming, model fallback, or provider fallback.
+- `policy.py` - strict catalog parsing and fail-closed free-tier preflight.
+- `reconciliation.py` - validation and normalization of provider quota snapshots.
+- `usage_ledger.py` - SQLite snapshots and atomic reservations across account, organization, project, and model scopes.
+- `runner.py` - supported adapter invocation path; authorizes and reserves before calling `complete`.
+- `openrouter.py` - standard-library Chat Completions adapter; no retries or provider/model fallback.
 - `config/provider-catalog.example.json` - empty catalog example; no model is pre-approved.
-- `.workshop/` - local task/context output; ignored by Git.
+- `.workshop/` - private local state, ignored by Git.
 
-## Task persistence (v2)
+## Task persistence
 
-Task files are written to unique same-directory temporary files, fsynced, then atomically replaced. Per-task exclusive locks serialize cross-process updates; stale locks are reclaimed only when their process is gone. Recovery deletes old orphaned temporaries and never promotes incomplete writes. Versioned JSON bundles enforce a 1 MiB import cap, schema validation, SHA-256 integrity checks (not authenticity), and no-overwrite imports.
+Task files use unique same-directory temporary files, fsync, and atomic replacement. Per-task locks serialize cross-process updates. Recovery removes old orphaned temporary files but never promotes incomplete writes. Versioned bundles enforce a 1 MiB cap, schema validation, SHA-256 integrity checks, and no-overwrite imports.
 
 ## Provider policy
 
-A model must be enabled, classified as `free_tier`, marked verified, within its verification dates, supported in the requested region, linked to official HTTPS pricing/terms, priced at exactly zero for input and output, and within token limits. Unknown policies are denied. The local catalog is `config/provider-catalog.json` and is gitignored. Every adapter must use the gate before making network requests; the gate itself never calls providers. The OpenRouter adapter sends the exact catalog model ID and disables provider-level fallbacks.
+A model must be enabled, verified, in-date, region-eligible, linked to official HTTPS pricing/terms, priced at exactly zero, and within token limits. Unknown policies are denied. The local catalog is gitignored. Every adapter must use the shared gate; OpenRouter pins the exact catalog model and disables provider fallbacks.
 
 ## Context policy
 
-Only `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/ARCHITECTURE.md`, and `docs/WORKFLOW.md` are included. Each has an explicit word limit and the complete bundle defaults to 2,500 words. Symlinks resolving outside the project root are rejected.
+Only `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/ARCHITECTURE.md`, and `docs/WORKFLOW.md` are included. Per-file and aggregate word budgets apply; symlinks resolving outside the project root are rejected.
 
-## Constraints and future work
+## Quota boundaries and constraints
 
-- Python 3.10+; standard library only for the current runtime.
-- No paid usage without explicit user approval; uncertain pricing or eligibility must fail closed.
-- Automatic authenticated quota refresh and cross-device quota synchronization are not implemented. Groq header and OpenRouter key-response converters import saved evidence only. The OpenRouter chat adapter is implemented but cannot run until a verified local model policy and fresh quota snapshots are configured.
-- Keep the runtime usable on a low-memory Chromebook; avoid Docker, local LLMs, and heavy databases.
+Quotas may be scoped to account, organization, project, or exact model. Organization/project scopes require non-secret aliases and matching snapshot IDs. SQLite v2 migrates legacy records and aggregates reservations across shared scopes. Missing, stale, expired, or mismatched snapshots block requests. External usage from other devices or browser tools is not automatically visible.
 
-
-## Quota boundary model (v2)
-
-Quotas are scoped to `account`, `organization`, `project`, or exact `model`. Account uses legacy `account_scope`; organization/project require non-secret `--quota-scope TYPE=ALIAS` and matching snapshot `scope_id`. SQLite v2 adds scope mappings, backfills v1 events/snapshots, and aggregates reservations across models for shared scopes. Missing bindings or any missing, stale, expired, or mismatched snapshot blocks requests.
+The runtime targets Python 3.10+ and the standard library. No paid usage is allowed without explicit approval. Automatic cross-device reconciliation is not implemented. OpenRouter inference remains unavailable until a verified local policy and fresh quota snapshots exist. Keep the runtime suitable for a low-memory Chromebook; avoid Docker, local LLMs, and heavy databases.
 
 ## Planned browser-assistant proposal boundary
 
-The next interoperability slice should accept a versioned, size-bounded JSON proposal bundle rather than executing free-form assistant output. A proposal may contain a response summary and proposed file operations, each tied to a repository-relative path and the expected SHA-256 of the current file (or an explicit create operation). Import must reject absolute paths, traversal, symlink escapes, protected runtime state, credential/config secrets, unsupported operations, oversized content, duplicate paths, and stale expected hashes.
+Accept a versioned, size-bounded JSON bundle, not executable assistant output. Each proposed file operation must name a repository-relative path and the expected SHA-256 of the current file, or explicitly declare a new file. Reject absolute paths, traversal, symlink escapes, protected state, credential files, unsupported operations, duplicate paths, oversized content, and stale hashes.
 
-Imported bundles are untrusted data, not commands. Stage them only in ignored local workspace storage, retain task/source/context provenance, and provide a read-only diff preview. The first implementation must not execute shell commands, install dependencies, invoke providers, or apply proposed files. Any future apply action must be a separate explicit user-approved operation that rechecks expected hashes immediately before writing; Git commits, pushes, pull requests, and merges remain separately approval-gated. Checksums detect accidental corruption but do not authenticate the assistant or bundle author.
+Imported bundles are untrusted data. Stage them only in ignored local storage, retain task/source/context provenance, and show a read-only diff. The first implementation must not execute shell commands, install dependencies, call providers, or apply files. Any future apply action must be separate and explicitly approved, with hashes rechecked immediately before writing. Commits, pushes, pull requests, and merges remain separate approval-gated actions. Checksums detect corruption; they do not authenticate the author.
