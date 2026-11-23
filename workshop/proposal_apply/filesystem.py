@@ -1,7 +1,7 @@
 """POSIX descriptor-relative filesystem primitives for proposal application.
 
-This module deliberately exposes inspection-only helpers at implementation
-stage 1. It does not create, replace, rename, or delete repository targets.
+This module exposes inspection-only helpers at implementation stage 1. It does
+not create, replace, rename, or delete repository targets.
 """
 from __future__ import annotations
 
@@ -28,10 +28,8 @@ def require_posix_support() -> None:
     """Fail closed unless the required POSIX descriptor-relative APIs exist."""
     if os.name != "posix":
         raise FilesystemSafetyError("Proposal application requires a POSIX platform")
-    if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
-        raise FilesystemSafetyError("Required O_DIRECTORY/O_NOFOLLOW flags are unavailable")
-    if not hasattr(os, "O_CLOEXEC"):
-        raise FilesystemSafetyError("Required O_CLOEXEC flag is unavailable")
+    if not all(hasattr(os, flag) for flag in ("O_DIRECTORY", "O_NOFOLLOW", "O_CLOEXEC")):
+        raise FilesystemSafetyError("Required POSIX open flags are unavailable")
     if any(function not in os.supports_dir_fd for function in _REQUIRED_DIR_FD_FUNCTIONS):
         raise FilesystemSafetyError("Required descriptor-relative filesystem operations are unavailable")
     if os.stat not in os.supports_follow_symlinks:
@@ -47,31 +45,6 @@ def _component(name: str) -> str:
             or "/" in name or "\\" in name or "\x00" in name):
         raise FilesystemSafetyError("Expected one safe path component")
     return name
-
-def open_repository_root(path: str | os.PathLike[str]) -> int:
-    """Open an existing, non-symlink directory and return its descriptor."""
-    require_posix_support()
-    root = os.fspath(path)
-    try:
-        before = os.lstat(root)
-    except OSError as exc:
-        raise FilesystemSafetyError("Repository root cannot be inspected") from exc
-    if stat.S_ISLNK(before.st_mode) or not stat.S_ISDIR(before.st_mode):
-        raise FilesystemSafetyError("Repository root must be an existing real directory")
-    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
-    try:
-        descriptor = os.open(root, flags)
-    except OSError as exc:
-        raise FilesystemSafetyError("Repository root could not be opened safely") from exc
-    try:
-        after = os.fstat(descriptor)
-        if (not stat.S_ISDIR(after.st_mode) or before.st_dev != after.st_dev
-                or before.st_ino != after.st_ino):
-            raise FilesystemSafetyError("Repository root changed while it was being opened")
-        return descriptor
-    except BaseException:
-        os.close(descriptor)
-        raise
 
 
 def open_repository_root(path: str | os.PathLike[str]) -> int:
@@ -105,6 +78,7 @@ def open_repository_root(path: str | os.PathLike[str]) -> int:
     except BaseException:
         os.close(descriptor)
         raise
+
 
 def directory_identity(descriptor: int) -> DirectoryIdentity:
     info = os.fstat(descriptor)
@@ -163,7 +137,9 @@ def open_regular_file_at(parent_fd: int, name: str) -> int:
     name = _component(name)
     try:
         descriptor = os.open(
-            name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=parent_fd
+            name,
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK,
+            dir_fd=parent_fd,
         )
     except OSError as exc:
         raise FilesystemSafetyError(f"Cannot safely open target file: {name}") from exc
