@@ -11,6 +11,7 @@ A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded
 - `workshop/cli.py` - task, context, and provider-policy commands.
 - `workshop/models.py`, `task_store.py` - task/checkpoint models and JSON persistence.
 - `workshop/context_manager.py` - allowlisted context, symlink containment, and word budgets.
+- `workshop/proposals.py` - bounded proposal validation, expected-hash checks, private staging, and read-only diffs.
 - `workshop/handoff.py` - Markdown handoffs with checkpoint state.
 - `workshop/providers/base.py` - provider-neutral message, response, and adapter protocol.
 - `policy.py` - strict catalog parsing and fail-closed free-tier preflight.
@@ -41,6 +42,6 @@ The runtime targets Python 3.10+ and the standard library. No paid usage is allo
 
 ## Planned browser-assistant proposal boundary
 
-Accept a versioned, size-bounded JSON bundle, not executable assistant output. Each proposed file operation must name a repository-relative path and the expected SHA-256 of the current file, or explicitly declare a new file. Reject absolute paths, traversal, symlink escapes, protected state, credential files, unsupported operations, duplicate paths, oversized content, and stale hashes.
+Implemented first slice: accept a versioned, size-bounded JSON bundle, not executable assistant output. Each proposed file operation names a repository-relative path and expected SHA-256 of the current file, or explicitly declares a new file. Reject absolute paths, traversal, symlink escapes, protected state, credential-like paths, unsupported operations, duplicate paths, oversized content, and stale hashes. Stage under ignored `.workshop/proposals/` and render a read-only diff.
 
 Imported bundles are untrusted data. Stage them only in ignored local storage, retain task/source/context provenance, and show a read-only diff. The first implementation must not execute shell commands, install dependencies, call providers, or apply files. Any future apply action must be separate and explicitly approved, with hashes rechecked immediately before writing. Commits, pushes, pull requests, and merges remain separate approval-gated actions. Checksums detect corruption; they do not authenticate the author.
