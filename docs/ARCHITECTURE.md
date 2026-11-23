@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the current executable slice and intended extension points.
+Current executable architecture and extension points.
 
 ## Overview
 
