@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the current executable slice and intended extension points.
+Current executable architecture and extension points.
 
 ## Overview
 
@@ -42,6 +42,6 @@ The runtime targets Python 3.10+ and the standard library. No paid usage is allo
 
 ## Planned browser-assistant proposal boundary
 
-Implemented review boundary: accept a versioned, size-bounded JSON bundle, not executable assistant output. Each proposed file operation names a repository-relative path and expected SHA-256 of the current file, or explicitly declares a new file. Reject absolute paths, traversal, symlinks, protected state, credential-like paths, unsupported operations, duplicate paths, oversized content, and stale hashes. Stage under ignored `.workshop/proposals/`, protect records with an integrity checksum, and recheck repository preconditions when rendering a read-only diff. The checksum is not an authenticity mechanism.
+Implemented review boundary: accept a versioned, size-bounded JSON bundle, not executable assistant output. Each proposed file operation names a repository-relative path and expected SHA-256 of the current file, or explicitly declares a new file. Reject absolute paths, traversal, symlinks, protected state, credential-like paths, unsupported operations, duplicate paths, oversized content, and stale hashes. Stage under ignored `.workshop/proposals/`, protect records with an integrity checksum, and recheck repository preconditions when rendering a read-only diff. The proposal may also carry a workshop task ID and SHA-256 of the exact context bundle; these are provenance references, not proof of author identity. The checksum is not an authenticity mechanism.
 
 Imported bundles are untrusted data. Stage them only in ignored local storage, retain task/source/context provenance, and show a read-only diff. The first implementation must not execute shell commands, install dependencies, call providers, or apply files. Any future apply action must be separate and explicitly approved, with hashes rechecked immediately before writing. Commits, pushes, pull requests, and merges remain separate approval-gated actions. Checksums detect corruption; they do not authenticate the author.

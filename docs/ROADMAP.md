@@ -44,7 +44,7 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [x] Generate read-only diffs, checksum staged records, escape terminal control characters, and reject stale/conflicting previews.
 - [x] Keep command execution and file application out of import/preview; no proposal content is executed or automatically applied.
 - [ ] Design a separately approved file-application transaction with immediate hash rechecks, symlink/race protections, and recoverable multi-file behavior. Do not implement until reviewed.
-- [ ] Preserve task/context provenance between API and browser sessions (current proposal metadata records source, timestamp, and bundle hash only).
+- [x] Preserve optional workshop task ID and exact context-bundle SHA-256 in proposal metadata without copying context contents.
 - [ ] Add manual fallback instructions when API quotas are exhausted.
 
 ## Proposal apply safety gate (not implemented)

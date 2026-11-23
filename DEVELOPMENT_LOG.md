@@ -71,3 +71,8 @@ Newest first, with ISO dates. Archive older entries after ~20 entries or 3,000 w
 - **Change:** PR #17 merged after all four required Python CI jobs passed. Staged proposal records now have integrity checks; preview revalidates schema and repository preconditions, rejects stale files/create targets, bounds existing-file reads, and escapes terminal control characters. The roadmap now distinguishes delivered review safeguards from a future, separately approved apply transaction.
 - **Checks / result:** PR #17 CI run [45114426832](https://github.com/hapu/ai-workshop-template/actions/runs/45114426832) passed Python 3.10–3.13.
 - **Follow-up:** Design robust explicit apply and recovery semantics before any file-writing implementation. The current CLI remains read-only.
+
+## 2026-11-23 (proposal provenance)
+- **Change:** Added optional `task_id` and `context_sha256` fields to proposal bundles. Both are strictly validated, preserved in private staged records, included in the staged-record integrity checksum, revalidated at preview, and displayed with the diff. Context content is not copied into the proposal. Updated the README, security/architecture docs, roadmap, TODO, and handoff.
+- **Checks / result:** Hosted CI is pending for this branch; verify the Python 3.10–3.13 matrix before merge.
+- **Follow-up:** Continue keeping proposal import/preview read-only. Design any future explicit apply operation separately.

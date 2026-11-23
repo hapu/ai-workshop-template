@@ -173,6 +173,29 @@ class ProposalTests(unittest.TestCase):
         self.assertIn("\\x1b[31m", preview)
         self.assertNotIn("\x1b[31m", preview)
 
+    def test_stages_task_and_context_provenance(self) -> None:
+        payload = json.loads(bundle({
+            "op": "create", "path": "note.md", "expected_sha256": None, "content": "x",
+        }))
+        payload["task_id"] = "a1b2c3d4"
+        payload["context_sha256"] = "a" * 64
+        staged = self.store.stage(json.dumps(payload))
+        preview = self.store.preview(staged.proposal_id)
+        self.assertIn("Task ID: a1b2c3d4", preview)
+        self.assertIn("Context SHA-256: " + "a" * 64, preview)
+
+    def test_rejects_invalid_task_or_context_provenance(self) -> None:
+        payload = json.loads(bundle({
+            "op": "create", "path": "note.md", "expected_sha256": None, "content": "x",
+        }))
+        payload["task_id"] = "../../bad"
+        with self.assertRaisesRegex(ProposalError, "task_id"):
+            parse_proposal(json.dumps(payload))
+        payload.pop("task_id")
+        payload["context_sha256"] = "not-a-digest"
+        with self.assertRaisesRegex(ProposalError, "context_sha256"):
+            parse_proposal(json.dumps(payload))
+
 
 if __name__ == "__main__":
     unittest.main()

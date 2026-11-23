@@ -25,6 +25,7 @@ _MAX_FILE_BYTES = 64 * 1024
 _MAX_PATH_LENGTH = 240
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _ID = re.compile(r"^[a-f0-9]{32}$")
+_TASK_ID = re.compile(r"^[a-f0-9]{8}$")
 _SECRET_NAME = re.compile(
     r"(^\.env(?:\.|$)|\.(?:pem|key|p12|pfx)$|"
     r"(?:^|[._-])(credentials?|secrets?|token|api[-_]?key|private-key)(?:[._-]|$))",
@@ -122,10 +123,11 @@ def parse_proposal(raw: bytes | str) -> tuple[dict[str, Any], tuple[ProposalOper
         payload = json.loads(encoded.decode("utf-8"))
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise ProposalError("Proposal must be valid UTF-8 JSON") from exc
-    if not isinstance(payload, dict) or set(payload) != {
-        "format", "version", "source", "created_at", "operations"
-    }:
-        raise ProposalError("Proposal must contain exactly format, version, source, created_at, operations")
+    required = {"format", "version", "source", "created_at", "operations"}
+    optional = {"task_id", "context_sha256"}
+    if (not isinstance(payload, dict) or not required.issubset(payload)
+            or set(payload) - required - optional):
+        raise ProposalError("Proposal is missing required fields or contains unsupported fields")
     if payload["format"] != _FORMAT or type(payload["version"]) is not int or payload["version"] != _VERSION:
         raise ProposalError("Unsupported proposal format or version")
     for field in ("source", "created_at"):
@@ -133,6 +135,10 @@ def parse_proposal(raw: bytes | str) -> tuple[dict[str, Any], tuple[ProposalOper
         if (not isinstance(value, str) or not value.strip() or len(value) > 200
                 or any(ord(char) < 32 or ord(char) == 127 for char in value)):
             raise ProposalError(f"{field} must be printable text up to 200 characters")
+    if "task_id" in payload and (not isinstance(payload["task_id"], str) or not _TASK_ID.fullmatch(payload["task_id"])):
+        raise ProposalError("task_id must be an 8-character workshop task ID")
+    if "context_sha256" in payload and (not isinstance(payload["context_sha256"], str) or not _SHA256.fullmatch(payload["context_sha256"])):
+        raise ProposalError("context_sha256 must be a lowercase SHA-256 digest")
     entries = payload["operations"]
     if not isinstance(entries, list) or not 1 <= len(entries) <= _MAX_OPERATIONS:
         raise ProposalError("Proposal must contain between 1 and 32 file operations")
@@ -265,6 +271,8 @@ class ProposalStore:
             "proposal_id": proposal_id,
             "source": payload["source"],
             "created_at": payload["created_at"],
+            "task_id": payload.get("task_id"),
+            "context_sha256": payload.get("context_sha256"),
             "bundle_sha256": _sha256(_canonical_json(payload)),
             "operations": [
                 {"op": op.operation, "path": op.path, "expected_sha256": op.expected_sha256,
@@ -311,6 +319,8 @@ class ProposalStore:
             "version": _VERSION,
             "source": record.get("source"),
             "created_at": record.get("created_at"),
+            **({"task_id": record["task_id"]} if record.get("task_id") is not None else {}),
+            **({"context_sha256": record["context_sha256"]} if record.get("context_sha256") is not None else {}),
             "operations": operations,
         }))
         if len(previews) != len(validated_operations):
@@ -344,6 +354,8 @@ class ProposalStore:
             f"Proposal: {proposal_id}",
             f"Source: {_safe_display(str(record.get('source', 'unknown')))}",
             f"Bundle SHA-256: {record.get('bundle_sha256', 'unknown')}",
+            f"Task ID: {record.get('task_id') or 'not supplied'}",
+            f"Context SHA-256: {record.get('context_sha256') or 'not supplied'}",
             f"Record SHA-256: {supplied_digest}",
             "Status: staged_read_only (repository files were not changed)",
             "Freshness: current repository files still match the staged preconditions",

@@ -8,6 +8,7 @@ Template-maintenance backlog. Keep one active task under Now and make each item 
 - [ ] Define explicit approval-gated apply semantics; keep file application disabled until separately reviewed.
 
 ## Next
+- [x] Preserve optional task ID and context-bundle SHA-256 provenance in assistant proposal bundles.
 - [x] Add atomic task writes, per-task concurrent-writer protection, and interrupted-write recovery.
 - [x] Add checksummed task bundle import/export with strict validation and no-overwrite imports.
 - [x] Add local atomic request/token quota reservations and adapter runner.
