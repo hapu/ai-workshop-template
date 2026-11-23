@@ -3,7 +3,7 @@
 Prioritized template-maintenance backlog. Keep exactly one active task under **Now**. A checked item belongs in **Completed**, not in an active queue.
 
 ## Now
-- [ ] Design and threat-model a separate, explicit proposal-apply transaction: exact proposal digest approval, immediate pre-write path/hash checks, symlink and race resistance, and recoverable multi-file behavior. Do not implement apply until this design is reviewed.
+- [ ] Review and approve the proposal-application safety design in [docs/PROPOSAL_APPLICATION_DESIGN.md](docs/PROPOSAL_APPLICATION_DESIGN.md). Do not implement apply until the design is approved.
 
 ## Next
 - [ ] Add manual fallback instructions for when browser/API quotas are exhausted.
