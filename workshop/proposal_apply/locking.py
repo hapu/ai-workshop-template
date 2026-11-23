@@ -24,6 +24,13 @@ def advisory_lock(
     require_posix_support()
     import fcntl
 
+    state_info = os.fstat(state_dir_fd)
+    if not stat.S_ISDIR(state_info.st_mode) or state_info.st_uid != os.getuid():
+        raise FilesystemSafetyError("Lock directory must be owned by the current user")
+    state_mode = stat.S_IMODE(state_info.st_mode)
+    if state_mode & 0o077 or state_mode & 0o300 != 0o300:
+        raise FilesystemSafetyError("Lock directory must be private and owner-writable")
+
     name = _component(name)
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout < 0:
         raise ValueError("Lock timeout must be a finite non-negative number")
