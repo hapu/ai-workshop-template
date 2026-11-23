@@ -62,7 +62,7 @@ class OpenRouterStatusTests(unittest.TestCase):
         self.assertEqual(status.effective_budget_remaining, 8.0)
         self.assertEqual(status.budget_count, 1)
 
-    def test_parses_paid-credit-history_flag_as_false(self):
+    def test_parses_paid_credit_history_flag_as_false(self):
         data = payload()
         data["data"]["is_free_tier"] = False
         status = parse_openrouter_key_status(data)
