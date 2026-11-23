@@ -31,6 +31,7 @@ class OpenRouterKeyStatus:
     daily_requests_used: int
     daily_requests_limit: int
     daily_requests_remaining: int
+    is_free_tier: bool | None
     key_credit_remaining: float | None
     effective_budget_remaining: float | None
     budget_count: int
@@ -75,6 +76,9 @@ def parse_openrouter_key_status(payload: dict[str, Any]) -> OpenRouterKeyStatus:
     if not isinstance(payload, dict) or not isinstance(payload.get("data"), dict):
         raise OpenRouterStatusError("OpenRouter key-status response is missing its data object")
     data = payload["data"]
+    is_free_tier = data.get("is_free_tier")
+    if is_free_tier is not None and not isinstance(is_free_tier, bool):
+        raise OpenRouterStatusError("is_free_tier must be a boolean when present")
     daily = data.get("free_model_daily_requests")
     if not isinstance(daily, dict):
         raise OpenRouterStatusError("OpenRouter response is missing free_model_daily_requests")
@@ -123,6 +127,7 @@ def parse_openrouter_key_status(payload: dict[str, Any]) -> OpenRouterKeyStatus:
         daily_requests_used=used,
         daily_requests_limit=limit,
         daily_requests_remaining=remaining,
+        is_free_tier=is_free_tier,
         key_credit_remaining=credit_remaining,
         effective_budget_remaining=effective_remaining,
         budget_count=len(budgets),
