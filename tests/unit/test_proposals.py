@@ -34,7 +34,7 @@ class ProposalTests(unittest.TestCase):
         staged = self.store.stage(raw)
         preview = self.store.preview(staged.proposal_id)
         self.assertIn("staged_read_only", preview)
-        self.assertIn("+ # Proposed", preview)
+        self.assertIn("+# Proposed", preview)
         self.assertFalse((self.root / "docs/new.md").exists())
         self.assertTrue((staged.directory / "proposal.json").is_file())
 
