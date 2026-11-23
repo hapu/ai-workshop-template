@@ -304,33 +304,38 @@ class ProposalStore:
 
         operations = record.get("operations")
         previews = record.get("previews")
-        if (not isinstance(operations, list) or not 1 <= len(operations) <= _MAX_OPERATIONS
-                or not isinstance(previews, list) or len(previews) != len(operations)):
+        if not isinstance(operations, list) or not isinstance(previews, list):
             raise ProposalError("Staged proposal contents are malformed")
+        _, validated_operations = parse_proposal(_canonical_json({
+            "format": _FORMAT,
+            "version": _VERSION,
+            "source": record.get("source"),
+            "created_at": record.get("created_at"),
+            "operations": operations,
+        }))
+        if len(previews) != len(validated_operations):
+            raise ProposalError("Staged proposal preview count does not match its operations")
 
         stale: list[str] = []
-        for item in operations:
-            if not isinstance(item, dict):
-                raise ProposalError("Staged proposal operation is malformed")
-            op, path, expected = item.get("op"), item.get("path"), item.get("expected_sha256")
-            _, target = _safe_path(self.repository, path)
+        for operation, item in zip(validated_operations, previews):
+            if (not isinstance(item, dict) or item.get("operation") != operation.operation
+                    or item.get("path") != operation.path or not isinstance(item.get("diff"), str)):
+                raise ProposalError("Staged proposal preview does not match its operation")
+            _, target = _safe_path(self.repository, operation.path)
             exists = target.exists()
-            if op == "create":
+            if operation.operation == "create":
                 if exists:
-                    stale.append(f"{path}: target now exists")
-            elif op in {"update", "delete"}:
-                if not exists or not target.is_file():
-                    stale.append(f"{path}: expected file is now missing")
-                else:
-                    try:
-                        if target.stat().st_size > _MAX_FILE_BYTES:
-                            stale.append(f"{path}: current file exceeds the review size limit")
-                        elif _sha256(target.read_bytes()) != expected:
-                            stale.append(f"{path}: file changed after staging")
-                    except OSError as exc:
-                        stale.append(f"{path}: cannot verify current file ({exc})")
+                    stale.append(f"{operation.path}: target now exists")
+            elif not exists or not target.is_file():
+                stale.append(f"{operation.path}: expected file is now missing")
             else:
-                raise ProposalError("Staged proposal contains an unsupported operation")
+                try:
+                    if target.stat().st_size > _MAX_FILE_BYTES:
+                        stale.append(f"{operation.path}: current file exceeds the review size limit")
+                    elif _sha256(target.read_bytes()) != operation.expected_sha256:
+                        stale.append(f"{operation.path}: file changed after staging")
+                except OSError as exc:
+                    stale.append(f"{operation.path}: cannot verify current file ({exc})")
         if stale:
             details = "; ".join(stale)
             raise ProposalError(f"Staged proposal is stale; discard and restage it: {details}")
