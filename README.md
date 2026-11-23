@@ -33,6 +33,43 @@ python3 -m workshop task handoff TASK_ID --output .workshop/task-handoff.md
 
 Task data and generated context bundles are stored locally under `.workshop/` and excluded from Git. To use another task-data directory, pass `--home PATH` before the command.
 
+## Browser-assistant proposal intake
+
+Assistant-generated file changes can be imported as a bounded JSON proposal for review. Staging validates repository-relative paths, rejects traversal, symlink escapes, credential-like and protected paths, limits the bundle to 256 KiB / 32 operations / 64 KiB per file, and checks the current SHA-256 before accepting updates or deletes.
+
+Example proposal:
+
+```json
+{
+  "format": "ai-workshop-file-proposal",
+  "version": 1,
+  "source": "browser-assistant",
+  "created_at": "2026-11-23T00:00:00Z",
+  "operations": [
+    {
+      "op": "update",
+      "path": "README.md",
+      "expected_sha256": "REPLACE_WITH_CURRENT_LOWERCASE_SHA256",
+      "content": "# Updated README\\n"
+    },
+    {
+      "op": "create",
+      "path": "docs/new-note.md",
+      "expected_sha256": null,
+      "content": "# New note\\n"
+    }
+  ]
+}
+```
+
+Stage and inspect it:
+
+```bash
+python3 -m workshop --home .workshop proposal stage proposal.json --project .
+python3 -m workshop --home .workshop proposal preview PROPOSAL_ID --project .
+```
+
+The proposal ID is printed by the stage command. Staged records are private under `.workshop/proposals/`. This version only validates, stages, and displays a read-only diff. It never applies changes, runs commands, installs dependencies, calls providers, or publishes Git changes. SHA-256 detects stale files and accidental corruption; it does not authenticate the proposal author. Review every change independently.
 ## Provider safety gate
 
 The provider system includes a common adapter contract, a fail-closed quota gate, and a minimal OpenRouter Chat Completions adapter. The approved model list is empty by default. The empty example catalog intentionally denies every model until you verify its current official pricing, free-tier eligibility, account/region requirements, model token limits, and terms.

@@ -56,3 +56,8 @@ Newest first, with ISO dates. Archive older entries after ~20 entries or 3,000 w
 ## 2026-11-21
 - **Change:** Added a dependency-free Python task CLI, JSON-backed task store, status and note commands, Markdown handoff generation, unit tests, GitHub Actions CI, and corrected the README license reference to GPL-3.0.
 - **Checks / result:** Nine unit tests and repository checks passed.
+
+## 2026-11-23
+- **Change:** Merged PR #14, documenting a safe browser-assistant proposal boundary. Started `feature/assistant-proposal-intake`: added a versioned bounded JSON schema, repository path and credential/protected-path checks, expected SHA-256 preconditions, private `.workshop` staging, read-only diff previews, CLI commands, and adversarial unit tests. No apply, shell execution, provider calls, or Git publication are implemented.
+- **Checks / result:** Hosted CI is pending for this feature branch; do not treat tests as passed until the Python 3.10–3.13 matrix completes.
+- **Follow-up:** Review CI results and code annotations; harden staged-record integrity and stale-preview detection before considering any explicit apply workflow.
