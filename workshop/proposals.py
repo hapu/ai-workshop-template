@@ -26,10 +26,10 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _ID = re.compile(r"^[a-f0-9]{32}$")
 _SECRET_NAME = re.compile(
     r"(^\.env(?:\.|$)|\.(?:pem|key|p12|pfx)$|"
-    r"(?:^|[._-])(credentials?|secrets?|token|private-key)(?:[._-]|$))",
+    r"(?:^|[._-])(credentials?|secrets?|token|api[-_]?key|private-key)(?:[._-]|$))",
     re.IGNORECASE,
 )
-_PROTECTED_PARTS = {".git", ".workshop", "secrets", "__pycache__"}
+_PROTECTED_PARTS = {".git", ".workshop", "secrets", "__pycache__", ".ssh", ".aws", ".azure"}
 
 
 class ProposalError(ValueError):
@@ -73,7 +73,7 @@ def _safe_path(root: Path, raw_path: object) -> tuple[str, Path]:
         raise ProposalError("Proposal targets protected local or Git metadata")
     if any(_SECRET_NAME.search(part) for part in parts):
         raise ProposalError("Proposal targets a credential-like path")
-    if raw_path == "config/provider-catalog.json":
+    if raw_path.casefold() == "config/provider-catalog.json":
         raise ProposalError("The local provider catalog is protected")
     pure = PurePosixPath(raw_path)
     if pure.is_absolute() or pure.as_posix() != raw_path:
@@ -114,7 +114,7 @@ def parse_proposal(raw: bytes | str) -> tuple[dict[str, Any], tuple[ProposalOper
         "format", "version", "source", "created_at", "operations"
     }:
         raise ProposalError("Proposal must contain exactly format, version, source, created_at, operations")
-    if payload["format"] != _FORMAT or payload["version"] != _VERSION:
+    if payload["format"] != _FORMAT or type(payload["version"]) is not int or payload["version"] != _VERSION:
         raise ProposalError("Unsupported proposal format or version")
     for field in ("source", "created_at"):
         value = payload[field]
@@ -131,7 +131,7 @@ def parse_proposal(raw: bytes | str) -> tuple[dict[str, Any], tuple[ProposalOper
         if not isinstance(item, dict) or set(item) - {"op", "path", "expected_sha256", "content"}:
             raise ProposalError("Each operation must be an object with supported fields only")
         op = item.get("op")
-        if op not in {"create", "update", "delete"}:
+        if not isinstance(op, str) or op not in {"create", "update", "delete"}:
             raise ProposalError("Supported operations are create, update, and delete")
         path = item.get("path")
         if not isinstance(path, str):
