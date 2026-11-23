@@ -113,6 +113,12 @@ class ProposalApplyLockTests(unittest.TestCase):
         self.state_fd = os.open(self.state, os.O_RDONLY | os.O_DIRECTORY)
         self.addCleanup(os.close, self.state_fd)
 
+    def test_insecure_lock_directory_is_rejected(self) -> None:
+        self.state.chmod(0o755)
+        with self.assertRaises(FilesystemSafetyError):
+            with advisory_lock(self.state_fd, "unsafe-dir.lock", timeout=0.1):
+                self.fail("Group/world-accessible lock directory was accepted")
+
     def test_lock_file_is_private_and_created(self) -> None:
         with advisory_lock(self.state_fd, "proposal-a.lock", timeout=0.1):
             info = (self.state / "proposal-a.lock").stat()
