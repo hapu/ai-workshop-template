@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import errno
-import math
 import fcntl
+import math
 import os
 import stat
 import time
@@ -75,8 +75,8 @@ def transaction_locks(
     repository_lock_name = _component(repository_lock_name)
     if proposal_lock_name == repository_lock_name:
         raise ValueError("Proposal and repository lock names must be different")
-    if not isinstance(timeout, (int, float)) or timeout < 0:
-        raise ValueError("Lock timeout must be a non-negative number")
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout < 0:
+        raise ValueError("Lock timeout must be a finite non-negative number")
 
     deadline = time.monotonic() + float(timeout)
     with ExitStack() as stack:
