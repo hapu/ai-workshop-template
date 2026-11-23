@@ -389,6 +389,14 @@ def _run_provider(args: argparse.Namespace) -> int:
             f"Daily free-model requests: {status.daily_requests_used}/"
             f"{status.daily_requests_limit} used; {status.daily_requests_remaining} remaining"
         )
+        if status.is_free_tier is None:
+            print("OpenRouter is_free_tier flag: not returned (unknown)")
+        else:
+            print(
+                "OpenRouter is_free_tier flag: "
+                f"{str(status.is_free_tier).lower()} "
+                "(indicates whether credits have been purchased previously)"
+            )
         print(f"API-key credit limit remaining: {status.key_credit_remaining}")
         print(f"Effective budget remaining (USD): {status.effective_budget_remaining}")
         print(f"Applicable budget entries returned: {status.budget_count}")

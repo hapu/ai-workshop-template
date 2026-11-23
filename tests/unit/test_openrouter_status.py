@@ -16,6 +16,7 @@ from workshop.providers.openrouter_status import (
 def payload():
     return {
         "data": {
+            "is_free_tier": True,
             "free_model_daily_requests": {"used": 12, "limit": 50, "remaining": 38},
             "limit_remaining": 0.0,
             "budgets": [
@@ -56,9 +57,28 @@ class OpenRouterStatusTests(unittest.TestCase):
         self.assertEqual(status.daily_requests_used, 12)
         self.assertEqual(status.daily_requests_limit, 50)
         self.assertEqual(status.daily_requests_remaining, 38)
+        self.assertIs(status.is_free_tier, True)
         self.assertEqual(status.key_credit_remaining, 0.0)
         self.assertEqual(status.effective_budget_remaining, 8.0)
         self.assertEqual(status.budget_count, 1)
+
+    def test_parses_paid_credit_history_flag_as_false(self):
+        data = payload()
+        data["data"]["is_free_tier"] = False
+        status = parse_openrouter_key_status(data)
+        self.assertIs(status.is_free_tier, False)
+
+    def test_missing_free_tier_flag_remains_unknown(self):
+        data = payload()
+        del data["data"]["is_free_tier"]
+        status = parse_openrouter_key_status(data)
+        self.assertIsNone(status.is_free_tier)
+
+    def test_rejects_malformed_free_tier_flag(self):
+        data = payload()
+        data["data"]["is_free_tier"] = "false"
+        with self.assertRaises(OpenRouterStatusError):
+            parse_openrouter_key_status(data)
 
     def test_rejects_inconsistent_daily_counter(self):
         data = payload()
