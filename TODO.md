@@ -3,9 +3,10 @@
 Prioritized template-maintenance backlog. Keep exactly one active task under **Now**. A checked item belongs in **Completed**, not in an active queue.
 
 ## Now
-- [ ] Review and approve the proposal-application safety design in [docs/PROPOSAL_APPLICATION_DESIGN.md](docs/PROPOSAL_APPLICATION_DESIGN.md). Do not implement apply until the design is approved.
+- [ ] Review PR #23 and verify stage-1 POSIX filesystem/locking tests on Python 3.10–3.13. Do not begin stage 2 until this gate is accepted.
 
 ## Next
+- [ ] After stage 1 is accepted, implement the versioned journal format, durable backup/prepared-file creation, and recovery inventory. This stage must not modify repository targets.
 - [ ] Add manual fallback instructions for when browser/API quotas are exhausted.
 - [ ] Add provider-specific quota refresh for remaining dimensions only where safe official APIs expose them.
 - [ ] Verify actual OpenRouter account/project quotas, external usage, region, model eligibility, and billing safeguards before adding any enabled model policy.
@@ -31,4 +32,5 @@ Prioritized template-maintenance backlog. Keep exactly one active task under **N
 - [x] OpenRouter adapter behind the shared quota gate, with exact model pinning, no retries, and no provider fallback.
 - [x] Safe proposal intake: bounded versioned bundles, path/protected-file checks, expected hashes, private staging, integrity checks, stale-preview rejection, and terminal-safe read-only diffs.
 - [x] Optional task ID and context-bundle SHA-256 provenance for proposals.
+- [x] Finalize and approve the proposal-application safety design with POSIX, rollback, existing-parent-only, and interactive-approval decisions.
 - [x] Protected main branch, required Python 3.10–3.13 CI, and squash-only PR workflow.
