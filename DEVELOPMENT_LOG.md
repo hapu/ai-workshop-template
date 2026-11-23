@@ -2,7 +2,7 @@
 
 ## 2026-11-22 (OpenRouter account tier metadata)
 - **Change:** Parse and display the documented `is_free_tier` boolean from `GET /api/v1/key`. A missing value remains unknown; malformed values are rejected. Documentation clarifies that the flag means whether the user has previously paid for credits, not whether a specific model is eligible or billing safeguards are disabled. No live request or inference was made.
-- **Verification:** Added tests for true, false, missing, and malformed flag values. Hosted CI pending.
+- **Verification:** Added tests for true, false, missing, and malformed flag values. GitHub Actions run [45087426550](https://github.com/hapu/ai-workshop-template/actions/runs/45087426550) passed on Python 3.10–3.13: 113 unit tests, word-budget checks, and repository smoke tests passed.
 - **Safety:** The refresh remains one authenticated GET, no redirects/retries; no account identifiers, credentials, or model approval are added to tracked files.
 
 
