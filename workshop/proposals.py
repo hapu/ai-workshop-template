@@ -79,6 +79,15 @@ def _safe_path(root: Path, raw_path: object) -> tuple[str, Path]:
     if pure.is_absolute() or pure.as_posix() != raw_path:
         raise ProposalError("Path is not canonical POSIX repository-relative syntax")
 
+    cursor = root
+    for part in parts[:-1]:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            raise ProposalError("Symlink path components are not supported")
+    if raw_path.casefold() in {".gitignore", ".gitattributes", ".gitmodules"}:
+        raise ProposalError("Proposal targets protected repository metadata")
+    if raw_path.casefold().startswith(".github/workflows/"):
+        raise ProposalError("Proposal targets protected automation workflows")
     target = root.joinpath(*parts)
     # Resolve the parent to detect symlink traversal, including existing links.
     try:
@@ -236,6 +245,13 @@ class ProposalStore:
             ))
             previews.append({"path": operation.path, "operation": operation.operation, "diff": diff})
 
+        self.proposals_dir.mkdir(parents=True, exist_ok=True)
+        if self.proposals_dir.is_symlink():
+            raise ProposalError("Proposal staging directory must not be a symlink")
+        try:
+            os.chmod(self.proposals_dir, 0o700)
+        except OSError as exc:
+            raise ProposalError("Cannot secure the private proposal staging directory") from exc
         proposal_id = uuid.uuid4().hex
         record = {
             "format": _FORMAT,
