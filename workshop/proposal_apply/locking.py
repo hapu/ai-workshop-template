@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import errno
-import fcntl
 import math
 import os
 import stat
@@ -10,7 +9,7 @@ import time
 from contextlib import ExitStack, contextmanager
 from typing import Iterator
 
-from .filesystem import FilesystemSafetyError, _component
+from .filesystem import FilesystemSafetyError, _component, require_posix_support
 
 
 class LockTimeoutError(TimeoutError):
@@ -22,6 +21,9 @@ def advisory_lock(
     state_dir_fd: int, name: str, timeout: float = 10.0
 ) -> Iterator[None]:
     """Hold an exclusive flock on a private lock file relative to state_dir_fd."""
+    require_posix_support()
+    import fcntl
+
     name = _component(name)
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout < 0:
         raise ValueError("Lock timeout must be a finite non-negative number")
