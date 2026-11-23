@@ -5,12 +5,9 @@ Keep under 300 words. Refresh at the end of each work session.
 - **Date:** 2026-11-23
 - **Repository:** `hapu/ai-workshop-template` (master template; GPL-3.0).
 - **Stable branch:** `main` at `b9bcd0622948ca5b7da5e17dfeed30930d24891a`. Latest merged work is PR #21.
-- **Pull requests:** No open PRs. PRs #1–#21 are closed; #15 and #19 were closed unmerged after corrections, with verified replacements in #16 and #20.
 - **CI:** Main commit passed `checks (3.10)`, `(3.11)`, `(3.12)`, and `(3.13)`. Run `python3 -m unittest discover -s tests/unit -v` and `bash scripts/check-words.sh && bash tests/smoke.sh` locally.
-- **Branch protection:** Active `Protect Main` ruleset; PRs and four CI checks required, squash-only, no force pushes or deletion, no bypass actors.
 - **Implemented:** Standard-library Python task/checkpoint persistence, bounded context and handoffs, quota ledger/reconciliation, gated OpenRouter adapter, and untrusted proposal import with path/hash validation, private staging, integrity/staleness checks, terminal-safe read-only preview, and optional task/context provenance.
 - **Safety:** Provider catalog remains empty. No live inference or paid API use. Proposal import/preview cannot apply files or execute commands. No apply command exists.
-- **Repository hygiene:** No open PRs. Twenty non-main branches remain; several are stale or diverged after squash merges. They were not deleted because this GitHub connection exposes no branch-delete action. Inspect before manual cleanup.
+- **Repository hygiene:** No open PRs. Twenty non-main branches remain; some are stale or diverged after squash merges. No branch deletion was available; inspect before manual cleanup.
 - **Next task:** Design and threat-model an explicit, recoverable, user-approved proposal-apply transaction. Do not implement file writes until the design is reviewed. Also add manual fallback instructions for exhausted API quotas.
 - **Tomorrow's start:** `git switch main && git pull --ff-only`; check `git status --short --branch`; read this file, `TODO.md`, `docs/ROADMAP.md`, and `docs/SECURITY.md`. Start a fresh feature branch; never work directly on `main`.
-- **Environment:** Python 3.10+ standard library; keep workflows light for the 4 GB Chromebook. Never put credentials or private `.workshop/` state in Git.
