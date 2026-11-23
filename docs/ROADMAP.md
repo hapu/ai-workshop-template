@@ -38,7 +38,11 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [ ] Add provider-specific quota coverage and measured fail-closed fallback without paid-model substitution.
 
 ## Phase 4: Browser assistant interoperability
-- [ ] Import assistant responses and proposed file changes safely.
+- [ ] Define a versioned, size-bounded proposal bundle for assistant responses and file operations.
+- [ ] Validate repository-relative paths, operation types, expected file hashes, and protected paths before staging.
+- [ ] Store imported proposals privately under ignored local state; preserve task, source, and context provenance.
+- [ ] Generate a read-only diff preview and reject stale or conflicting proposals.
+- [ ] Keep command execution and file application out of the import path; require separate explicit approval for later apply/commit/push actions.
 - [ ] Preserve context and provenance between API and browser sessions.
 - [ ] Add manual fallback instructions when API quotas are exhausted.
 

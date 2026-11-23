@@ -3,7 +3,7 @@
 Template-maintenance backlog. Keep one active task under Now and make each item verifiable.
 
 ## Now
-- [ ] Verify actual OpenRouter account/project quotas, external usage, and billing safeguards before adding the first enabled model policy.
+- [ ] Define and implement safe browser-assistant proposal intake: bounded manifest, path and expected-hash validation, private staging, and read-only diff review. Do not execute imported commands or apply changes automatically.
 
 ## Next
 - [x] Add atomic task writes, per-task concurrent-writer protection, and interrupted-write recovery.
@@ -18,7 +18,7 @@ Template-maintenance backlog. Keep one active task under Now and make each item 
 - [ ] Design measured, fail-closed fallback behavior between independently verified free models.
 
 ## Later
-- [ ] Implement browser-assistant response import and proposed-change review.
+- [ ] Verify actual OpenRouter account/project quotas, external usage, and billing safeguards before adding the first enabled model policy.
 - [ ] Add Git branch preparation and approval-gated pull-request helpers.
 
 ## Blocked / needs decision
