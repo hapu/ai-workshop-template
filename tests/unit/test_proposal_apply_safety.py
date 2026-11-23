@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -123,6 +125,36 @@ class ProposalApplyLockTests(unittest.TestCase):
                 with advisory_lock(self.state_fd, "same.lock", timeout=0.05):
                     self.fail("Second lock acquisition unexpectedly succeeded")
             self.assertGreaterEqual(time.monotonic() - started, 0.04)
+
+    def test_process_exit_releases_os_managed_lock(self) -> None:
+        script = (
+            "import os, sys, time\\n"
+            "from workshop.proposal_apply.locking import advisory_lock\\n"
+            "fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY)\\n"
+            "with advisory_lock(fd, sys.argv[2], timeout=2):\\n"
+            " print('READY', flush=True)\\n"
+            " time.sleep(30)\\n"
+            "os.close(fd)\\n"
+        )
+        process = subprocess.Popen(
+            [sys.executable, "-c", script, str(self.state), "process.lock"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            self.assertEqual(process.stdout.readline().strip(), "READY")
+            with self.assertRaises(LockTimeoutError):
+                with advisory_lock(self.state_fd, "process.lock", timeout=0.05):
+                    self.fail("Parent unexpectedly acquired the child's lock")
+            process.terminate()
+            process.wait(timeout=5)
+            with advisory_lock(self.state_fd, "process.lock", timeout=0.2):
+                pass
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=5)
 
     def test_lock_is_released_when_context_exits(self) -> None:
         with advisory_lock(self.state_fd, "release.lock", timeout=0.1):
