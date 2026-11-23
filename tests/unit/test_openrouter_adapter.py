@@ -96,6 +96,79 @@ class OpenRouterAdapterTests(unittest.TestCase):
         self.assertNotIn("secret body", str(caught.exception))
         send.assert_called_once()
 
+    def test_free_tier_429_exposes_safe_rate_limit_metadata_without_body(self) -> None:
+        payload = {
+            "error": {
+                "code": 429,
+                "message": "private provider message",
+                "metadata": {"limit_source": "openrouter_free_tier_per_minute"},
+            }
+        }
+        error = HTTPError(
+            "https://openrouter.ai/api/v1/chat/completions", 429, "rate limited",
+            {
+                "X-RateLimit-Limit": "20",
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": "1792448640000",
+            },
+            io.BytesIO(json.dumps(payload).encode("utf-8")),
+        )
+        with patch("workshop.providers.openrouter.urlopen", side_effect=error) as send:
+            with self.assertRaises(ProviderTransportError) as caught:
+                OpenRouterAdapter("secret").complete(
+                    model="vendor/model:free", messages=[Message("user", "hello")], max_output_tokens=10
+                )
+        result = caught.exception
+        self.assertEqual(result.status_code, 429)
+        self.assertEqual(result.limit_source, "openrouter_free_tier_per_minute")
+        self.assertEqual(result.rate_limit_limit, 20)
+        self.assertEqual(result.rate_limit_remaining, 0)
+        self.assertEqual(result.rate_limit_reset, "1792448640000")
+        self.assertIn("limit source: openrouter_free_tier_per_minute", str(result))
+        self.assertNotIn("private provider message", str(result))
+        send.assert_called_once()
+
+    def test_upstream_429_classification_and_retry_after_are_reported_safely(self) -> None:
+        payload = {
+            "error": {
+                "code": 429,
+                "message": "do not expose this",
+                "metadata": {"limit_source": "upstream_provider_shared_pool", "provider_code": 429},
+            }
+        }
+        error = HTTPError(
+            "https://openrouter.ai/api/v1/chat/completions", 429, "rate limited",
+            {"Retry-After": "3"},
+            io.BytesIO(json.dumps(payload).encode("utf-8")),
+        )
+        with patch("workshop.providers.openrouter.urlopen", side_effect=error):
+            with self.assertRaises(ProviderTransportError) as caught:
+                OpenRouterAdapter("secret").complete(
+                    model="vendor/model:free", messages=[Message("user", "hello")], max_output_tokens=10
+                )
+        self.assertEqual(caught.exception.limit_source, "upstream_provider_shared_pool")
+        self.assertEqual(caught.exception.provider_code, "429")
+        self.assertEqual(caught.exception.retry_after, "3")
+        self.assertIn("request was not retried", str(caught.exception))
+        self.assertNotIn("do not expose this", str(caught.exception))
+
+    def test_malformed_rate_limit_headers_are_ignored(self) -> None:
+        error = HTTPError(
+            "https://openrouter.ai/api/v1/chat/completions", 429, "rate limited",
+            {"X-RateLimit-Limit": "20\nsecret", "X-RateLimit-Remaining": "-1",
+             "X-RateLimit-Reset": "not-a-timestamp", "Retry-After": "bad\nvalue"},
+            io.BytesIO(b"not json"),
+        )
+        with patch("workshop.providers.openrouter.urlopen", side_effect=error):
+            with self.assertRaises(ProviderTransportError) as caught:
+                OpenRouterAdapter("secret").complete(
+                    model="vendor/model:free", messages=[Message("user", "hello")], max_output_tokens=10
+                )
+        self.assertIsNone(caught.exception.rate_limit_limit)
+        self.assertIsNone(caught.exception.rate_limit_remaining)
+        self.assertIsNone(caught.exception.rate_limit_reset)
+        self.assertIsNone(caught.exception.retry_after)
+
     def test_network_failure_is_not_retried(self) -> None:
         with patch("workshop.providers.openrouter.urlopen", side_effect=URLError("offline")) as send:
             with self.assertRaisesRegex(ProviderTransportError, "not retried"):

@@ -1,5 +1,11 @@
 # Development Log
 
+## 2026-11-22 (OpenRouter rate-limit diagnostics)
+- **Change:** The adapter now parses bounded HTTP error JSON and documented rate-limit headers, exposing safe status, limit-source, upstream provider code, Retry-After, and free-tier reset details. Response bodies, prompt text, and credentials remain hidden. No automatic retry, provider/model fallback, live request, or model activation was added.
+- **Verification:** Added mocked tests for OpenRouter shared free-tier 429s, upstream-provider 429s, malformed headers, body sanitization, and one-call behavior. Hosted CI is pending.
+- **Limitations:** The key-status endpoint still does not expose per-minute usage proactively; rate-limit metadata is only available after an error. No retry scheduling or cooldown persistence is implemented.
+
+
 Newest first, with ISO dates. Archive older entries after ~20 entries or 3,000 words.
 
 ## 2026-11-22 (OpenRouter key-status refresh)
