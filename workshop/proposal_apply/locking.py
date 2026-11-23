@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import errno
+import math
 import fcntl
 import os
 import stat
@@ -22,9 +23,9 @@ def advisory_lock(
 ) -> Iterator[None]:
     """Hold an exclusive flock on a private lock file relative to state_dir_fd."""
     name = _component(name)
-    if not isinstance(timeout, (int, float)) or timeout < 0:
-        raise ValueError("Lock timeout must be a non-negative number")
-    flags = os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout < 0:
+        raise ValueError("Lock timeout must be a finite non-negative number")
+    flags = os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
     try:
         descriptor = os.open(name, flags, 0o600, dir_fd=state_dir_fd)
     except OSError as exc:
@@ -55,9 +56,11 @@ def advisory_lock(
                 time.sleep(min(0.05, remaining))
         yield
     finally:
-        if locked:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
-        os.close(descriptor)
+        try:
+            if locked:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
 
 
 @contextmanager
