@@ -61,3 +61,8 @@ Newest first, with ISO dates. Archive older entries after ~20 entries or 3,000 w
 - **Change:** Merged PR #14, documenting a safe browser-assistant proposal boundary. Started `feature/assistant-proposal-intake`: added a versioned bounded JSON schema, repository path and credential/protected-path checks, expected SHA-256 preconditions, private `.workshop` staging, read-only diff previews, CLI commands, and adversarial unit tests. No apply, shell execution, provider calls, or Git publication are implemented.
 - **Checks / result:** Hosted CI is pending for this feature branch; do not treat tests as passed until the Python 3.10–3.13 matrix completes.
 - **Follow-up:** Review CI results and code annotations; harden staged-record integrity and stale-preview detection before considering any explicit apply workflow.
+
+## 2026-11-23 (proposal review hardening)
+- **Change:** PR #16 merged the initial safe proposal intake. Added a checksum over staged review records, schema revalidation when loading staged proposals, current-file/create-state rechecks before preview, bounded reads of existing files, and escaping of terminal control characters in diffs. Stale proposals are rejected and must be staged again. No apply operation was added.
+- **Checks / result:** CI for this hardening branch is pending; verify the full Python 3.10–3.13 matrix before merge.
+- **Follow-up:** Decide whether a separately approved apply workflow is desirable. Do not enable automatic application or execution of proposal content.

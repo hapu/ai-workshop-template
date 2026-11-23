@@ -69,7 +69,7 @@ python3 -m workshop --home .workshop proposal stage proposal.json --project .
 python3 -m workshop --home .workshop proposal preview PROPOSAL_ID --project .
 ```
 
-The proposal ID is printed by the stage command. Staged records are private under `.workshop/proposals/`. This version only validates, stages, and displays a read-only diff. It never applies changes, runs commands, installs dependencies, calls providers, or publishes Git changes. SHA-256 detects stale files and accidental corruption; it does not authenticate the proposal author. Review every change independently.
+The proposal ID is printed by the stage command. Staged records are private under `.workshop/proposals/`. Preview verifies the staged-record checksum and rechecks the current repository files against their original preconditions; if any target changed, it rejects the preview and asks you to restage. This version only validates, stages, and displays a read-only diff. It never applies changes, runs commands, installs dependencies, calls providers, or publishes Git changes. SHA-256 detects accidental corruption and stale files; it does not authenticate the proposal author. Review every change independently.
 ## Provider safety gate
 
 The provider system includes a common adapter contract, a fail-closed quota gate, and a minimal OpenRouter Chat Completions adapter. The approved model list is empty by default. The empty example catalog intentionally denies every model until you verify its current official pricing, free-tier eligibility, account/region requirements, model token limits, and terms.

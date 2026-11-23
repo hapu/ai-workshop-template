@@ -4,7 +4,8 @@ Template-maintenance backlog. Keep one active task under Now and make each item 
 
 ## Now
 - [x] Implement the first safe browser-assistant proposal intake slice: bounded manifest, path/hash validation, private staging, and read-only diff preview. No automatic application or command execution.
-- [ ] Add tamper/stale-preview detection and an explicit approval-gated apply design; keep file application disabled until separately reviewed.
+- [x] Add staged-record integrity checks, stale-target detection, and terminal-control escaping to proposal previews.
+- [ ] Define explicit approval-gated apply semantics; keep file application disabled until separately reviewed.
 
 ## Next
 - [x] Add atomic task writes, per-task concurrent-writer protection, and interrupted-write recovery.
