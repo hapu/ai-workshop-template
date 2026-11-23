@@ -1,5 +1,10 @@
 # Development Log
 
+## 2026-11-22 (post-PR #13 stabilization and proposal workflow design)
+- **Change:** PR #13 merged after its Python 3.10–3.13 CI matrix passed. Verified the active `Protect Main` repository ruleset: default-branch targeting, pull requests, four required CI checks, conversation resolution, squash-only merges, blocked force pushes/deletions, and an empty bypass list. Audited `feature/provider-usage-settlement`: five commits behind `main`, zero unique commits; left the stale branch untouched.
+- **Next milestone:** Define a browser-assistant proposal intake boundary. Imported responses and file changes must be treated as untrusted data, validated and staged, then shown as a read-only diff. No command execution or automatic file application is in scope for the first slice.
+- **Verification:** PR #13 GitHub Actions run [45109477505](https://github.com/hapu/ai-workshop-template/actions/runs/45109477505) completed successfully. No provider inference or paid API usage was performed.
+
 ## 2026-11-22 (OpenRouter account tier metadata)
 - **Change:** Parse and display the documented `is_free_tier` boolean from `GET /api/v1/key`. A missing value remains unknown; malformed values are rejected. Documentation clarifies that the flag means whether the user has previously paid for credits, not whether a specific model is eligible or billing safeguards are disabled. No live request or inference was made.
 - **Verification:** Added tests for true, false, missing, and malformed flag values. GitHub Actions run [45087426550](https://github.com/hapu/ai-workshop-template/actions/runs/45087426550) passed on Python 3.10–3.13: 113 unit tests, word-budget checks, and repository smoke tests passed.
