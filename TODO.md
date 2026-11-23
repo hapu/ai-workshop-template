@@ -1,28 +1,34 @@
 # TODO
 
-Template-maintenance backlog. Keep one active task under Now and make each item verifiable.
+Prioritized template-maintenance backlog. Keep exactly one active task under **Now**. A checked item belongs in **Completed**, not in an active queue.
 
 ## Now
-- [x] Implement the first safe browser-assistant proposal intake slice: bounded manifest, path/hash validation, private staging, and read-only diff preview. No automatic application or command execution.
-- [x] Add staged-record integrity checks, stale-target detection, and terminal-control escaping to proposal previews.
-- [ ] Define explicit approval-gated apply semantics; keep file application disabled until separately reviewed.
+- [ ] Design and threat-model a separate, explicit proposal-apply transaction: exact proposal digest approval, immediate pre-write path/hash checks, symlink and race resistance, and recoverable multi-file behavior. Do not implement apply until this design is reviewed.
 
 ## Next
-- [x] Preserve optional task ID and context-bundle SHA-256 provenance in assistant proposal bundles.
-- [x] Add atomic task writes, per-task concurrent-writer protection, and interrupted-write recovery.
-- [x] Add checksummed task bundle import/export with strict validation and no-overwrite imports.
-- [x] Add local atomic request/token quota reservations and adapter runner.
-- [x] Import external provider quota snapshots and combine them with subsequent local reservations.
-- [x] Import Groq's documented RPD and combined TPM response headers; account for combined token reservations.
-- [x] Add authenticated OpenRouter key-status refresh for the documented daily free-model request counter and display the `is_free_tier` account-history flag; monetary budget fields remain informational.
-- [x] Add sanitized OpenRouter HTTP rate-limit classification and reset metadata; no automatic retry or fallback.
-- [ ] Add complete provider-specific quota handling for remaining dimensions where safe APIs exist.
-- [ ] Add optional encrypted ledger export/import or a shared ledger for multi-device usage.
-- [ ] Design measured, fail-closed fallback behavior between independently verified free models.
+- [ ] Add manual fallback instructions for when browser/API quotas are exhausted.
+- [ ] Add provider-specific quota refresh for remaining dimensions only where safe official APIs expose them.
+- [ ] Verify actual OpenRouter account/project quotas, external usage, region, model eligibility, and billing safeguards before adding any enabled model policy.
+- [ ] Add measured, fail-closed fallback only between independently verified free models; never substitute a paid or unknown model.
+- [ ] Consider encrypted ledger export/import or a shared multi-device ledger.
+- [ ] Reconcile usage from other devices and browser/API tools before enabling any adapter.
 
 ## Later
-- [ ] Verify actual OpenRouter account/project quotas, external usage, and billing safeguards before adding the first enabled model policy.
-- [ ] Add Git branch preparation and approval-gated pull-request helpers.
+- [ ] Add opt-in project checks and isolated execution.
+- [ ] Add branch preparation and approval-gated pull-request helpers.
+- [ ] Add rollback/recovery procedures for approved Git operations.
+- [ ] Add scheduled provider re-verification and end-to-end tests for routing, free-only enforcement, and recovery.
 
-## Blocked / needs decision
-- [ ] Add a second provider only after OpenRouter account-level eligibility, quota, and no-billing safeguards are verified.
+## Blocked / decision required
+- [ ] Add a second provider only after OpenRouter account-level eligibility, quotas, external usage, and no-billing safeguards are verified.
+- [ ] Decide whether cross-device quota sharing is worth its synchronization and privacy costs.
+
+## Completed
+- [x] Python 3.10+ standard-library CLI, task/checkpoint persistence, atomic writes, locking, recovery, and checksummed portable bundles.
+- [x] Allowlisted bounded context, symlink containment, and resumable handoffs.
+- [x] Provider-neutral contract, empty-by-default model catalog, fail-closed policy, SQLite quota ledger, and atomic reservations.
+- [x] External quota snapshot reconciliation, OpenRouter key-status refresh, Groq header reconciliation, and sanitized OpenRouter rate-limit diagnostics.
+- [x] OpenRouter adapter behind the shared quota gate, with exact model pinning, no retries, and no provider fallback.
+- [x] Safe proposal intake: bounded versioned bundles, path/protected-file checks, expected hashes, private staging, integrity checks, stale-preview rejection, and terminal-safe read-only diffs.
+- [x] Optional task ID and context-bundle SHA-256 provenance for proposals.
+- [x] Protected main branch, required Python 3.10–3.13 CI, and squash-only PR workflow.
