@@ -9,6 +9,10 @@
 - External quota snapshot files contain account usage metadata. Never include API keys, Authorization headers, cookies, or secret fields. The importer rejects known credential field names.
 - `config/provider-catalog.json` is a local policy file and is ignored by Git. The tracked example intentionally contains an empty model list.
 
+## Browser-assistant proposals
+
+Proposal bundles are untrusted data, never executable instructions. The importer enforces strict JSON schema and size limits, repository-relative paths, symlink containment, protected metadata/configuration and credential-path exclusions, unique targets, and expected SHA-256 preconditions for existing files. Staging writes only to private `.workshop/proposals/` storage and renders a read-only diff. It does not apply changes or execute any proposal content. A matching hash is a freshness check, not proof of author identity. Review provenance and every diff manually.
+
 ## Provider and spending controls
 - The provider preflight denies unknown, disabled, trial-only, unverified, expired, region-ineligible, non-zero-priced, or over-limit models.
 - The local quota ledger reserves requests/token units atomically before inference; all adapters must use `execute_with_free_tier_gate`, not raw provider methods.
