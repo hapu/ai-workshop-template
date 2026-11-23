@@ -29,6 +29,7 @@ from .providers.reconciliation import (
 )
 from .providers.usage_ledger import QuotaExceeded, UsageLedger, UsageLedgerError
 from .task_store import TaskStore, TaskStoreError
+from .proposals import ProposalError, ProposalStore
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -85,6 +86,15 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--project", default=".")
     build.add_argument("--max-words", type=int, default=2500)
     build.add_argument("--output", type=Path)
+
+    proposal = commands.add_parser("proposal", help="stage and review untrusted assistant file proposals")
+    proposal_commands = proposal.add_subparsers(dest="proposal_command", required=True)
+    proposal_stage = proposal_commands.add_parser("stage", help="validate and privately stage a JSON proposal")
+    proposal_stage.add_argument("bundle", type=Path)
+    proposal_stage.add_argument("--project", default=".", help="repository root (default: current directory)")
+    proposal_preview = proposal_commands.add_parser("preview", help="show a read-only diff for a staged proposal")
+    proposal_preview.add_argument("proposal_id")
+    proposal_preview.add_argument("--project", default=".", help="repository root (default: current directory)")
 
     provider = commands.add_parser("provider", help="inspect provider policies and run a zero-cost preflight")
     provider_commands = provider.add_subparsers(dest="provider_command", required=True)
@@ -518,6 +528,22 @@ def _run_provider(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_proposal(args: argparse.Namespace, home: str) -> int:
+    store = ProposalStore(args.project, home)
+    if args.proposal_command == "stage":
+        staged = store.stage_file(args.bundle)
+        print(f"Staged proposal: {staged.proposal_id}")
+        print(f"Operations: {len(staged.operations)}")
+        print(f"Private review record: {staged.directory / 'proposal.json'}")
+        print("Read-only staging only: repository files were not changed.")
+        print(f"Preview: python3 -m workshop --home {home} proposal preview {staged.proposal_id} --project {args.project}")
+        return 0
+    if args.proposal_command == "preview":
+        sys.stdout.write(store.preview(args.proposal_id))
+        return 0
+    return 2
+
+
 def _doctor(home: str) -> int:
     version = sys.version_info
     print(f"Python: {version.major}.{version.minor}.{version.micro}")
@@ -548,8 +574,10 @@ def main(argv: list[str] | None = None) -> int:
             return _run_context(args)
         if args.command == "provider":
             return _run_provider(args)
+        if args.command == "proposal":
+            return _run_proposal(args, args.home)
         return _run_task(args, TaskStore(args.home))
-    except (TaskStoreError, ContextError, ProviderCatalogError, UsageLedgerError) as exc:
+    except (TaskStoreError, ContextError, ProviderCatalogError, UsageLedgerError, ProposalError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     except OSError as exc:
