@@ -189,6 +189,12 @@ class ProposalApplyLockTests(unittest.TestCase):
             self.assertTrue((self.state / "proposal-123.lock").exists())
             self.assertTrue((self.state / "repository.lock").exists())
 
+    def test_repository_lock_serializes_distinct_proposals(self) -> None:
+        with transaction_locks(self.state_fd, "proposal-a.lock", timeout=0.1):
+            with self.assertRaises(LockTimeoutError):
+                with transaction_locks(self.state_fd, "proposal-b.lock", timeout=0.05):
+                    self.fail("A second proposal bypassed the repository lock")
+
     def test_transaction_lock_names_must_be_distinct(self) -> None:
         with self.assertRaises(ValueError):
             with transaction_locks(self.state_fd, "same.lock", "same.lock", timeout=0.1):
