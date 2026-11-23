@@ -44,10 +44,9 @@ def require_posix_support() -> None:
 
 def _component(name: str) -> str:
     if (not isinstance(name, str) or not name or name in {".", ".."}
-            or "/" in name or "\\\\" in name or "\\x00" in name):
+            or "/" in name or "\\" in name or "\x00" in name):
         raise FilesystemSafetyError("Expected one safe path component")
     return name
-
 
 def open_repository_root(path: str | os.PathLike[str]) -> int:
     """Open an existing, non-symlink directory and return its descriptor."""
@@ -74,6 +73,38 @@ def open_repository_root(path: str | os.PathLike[str]) -> int:
         os.close(descriptor)
         raise
 
+
+def open_repository_root(path: str | os.PathLike[str]) -> int:
+    """Open an existing directory by walking from / without following links."""
+    require_posix_support()
+    root = os.path.abspath(os.fspath(path))
+    try:
+        before = os.stat(root, follow_symlinks=False)
+    except OSError as exc:
+        raise FilesystemSafetyError("Repository root cannot be inspected") from exc
+    if not stat.S_ISDIR(before.st_mode):
+        raise FilesystemSafetyError("Repository root must be an existing real directory")
+
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        filesystem_root_fd = os.open("/", flags)
+        try:
+            components = [part for part in root.split("/") if part]
+            descriptor = open_existing_parent(filesystem_root_fd, components)
+        finally:
+            os.close(filesystem_root_fd)
+    except OSError as exc:
+        raise FilesystemSafetyError("Repository root could not be opened safely") from exc
+
+    try:
+        after = os.fstat(descriptor)
+        if (not stat.S_ISDIR(after.st_mode) or before.st_dev != after.st_dev
+                or before.st_ino != after.st_ino):
+            raise FilesystemSafetyError("Repository root changed while it was being opened")
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
 
 def directory_identity(descriptor: int) -> DirectoryIdentity:
     info = os.fstat(descriptor)
@@ -132,7 +163,7 @@ def open_regular_file_at(parent_fd: int, name: str) -> int:
     name = _component(name)
     try:
         descriptor = os.open(
-            name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent_fd
+            name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=parent_fd
         )
     except OSError as exc:
         raise FilesystemSafetyError(f"Cannot safely open target file: {name}") from exc
