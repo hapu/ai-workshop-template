@@ -43,7 +43,7 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [x] Store proposals privately under ignored `.workshop/proposals/` state with source, timestamp, and bundle-hash provenance.
 - [x] Generate read-only diffs, checksum staged records, escape terminal control characters, and reject stale/conflicting previews.
 - [x] Keep command execution and file application out of import/preview; no proposal content is executed or automatically applied.
-- [ ] Review and approve the finalized [proposal-application safety design](PROPOSAL_APPLICATION_DESIGN.md) before implementation.
+- [x] Review and approve the finalized [proposal-application safety design](PROPOSAL_APPLICATION_DESIGN.md) before implementation.
 - [x] Preserve optional workshop task ID and exact context-bundle SHA-256 in proposal metadata without copying context contents.
 - [ ] Add manual fallback instructions when API quotas are exhausted.
 
@@ -51,7 +51,7 @@ The master template is upgraded incrementally. A checked box means the behavior 
 
 The proposed design is documented in [docs/PROPOSAL_APPLICATION_DESIGN.md](PROPOSAL_APPLICATION_DESIGN.md). Selected decisions: POSIX-first with fail-closed capability checks; rollback as the default interrupted-transaction recovery; existing parent directories only; and interactive confirmation bound to the full staged-record SHA-256 digest.
 
-A future apply operation must remain a separate local CLI action, never part of import or preview. It must revalidate the staged-record checksum, repository identity, every path, and every expected file hash immediately before writes; reject symlinks and protected paths again; use descriptor-relative filesystem operations and advisory locks; and maintain a durable journal and backups for recoverable multi-file behavior. Git commits, pushes, PRs, and merges remain separate approvals. No apply or recovery command exists today.
+The design was approved on 2026-11-23. Implementation proceeds through separate review gates. Stage 1 is in draft [PR #23](https://github.com/hapu/ai-workshop-template/pull/23): POSIX capability checks, descriptor-relative no-follow traversal, read-only regular-file inspection, and advisory-lock infrastructure with tests. Stage 1 does not write repository targets. Next, after review, add the durable journal, backup preparation, and recovery inventory without target writes. Only a later approved gate may add interactive digest-bound application and rollback. Git commits, pushes, PRs, and merges remain separate approvals. No apply or recovery command exists today.
 
 ## Phase 5: Controlled development automation
 - [ ] Add opt-in project checks and isolated execution.
