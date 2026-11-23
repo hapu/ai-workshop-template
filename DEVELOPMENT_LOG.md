@@ -66,3 +66,8 @@ Newest first, with ISO dates. Archive older entries after ~20 entries or 3,000 w
 - **Change:** PR #16 merged the initial safe proposal intake. Added a checksum over staged review records, schema revalidation when loading staged proposals, current-file/create-state rechecks before preview, bounded reads of existing files, and escaping of terminal control characters in diffs. Stale proposals are rejected and must be staged again. No apply operation was added.
 - **Checks / result:** CI for this hardening branch is pending; verify the full Python 3.10–3.13 matrix before merge.
 - **Follow-up:** Decide whether a separately approved apply workflow is desirable. Do not enable automatic application or execution of proposal content.
+
+## 2026-11-23 (proposal review hardening merged)
+- **Change:** PR #17 merged after all four required Python CI jobs passed. Staged proposal records now have integrity checks; preview revalidates schema and repository preconditions, rejects stale files/create targets, bounds existing-file reads, and escapes terminal control characters. The roadmap now distinguishes delivered review safeguards from a future, separately approved apply transaction.
+- **Checks / result:** PR #17 CI run [45114426832](https://github.com/hapu/ai-workshop-template/actions/runs/45114426832) passed Python 3.10–3.13.
+- **Follow-up:** Design robust explicit apply and recovery semantics before any file-writing implementation. The current CLI remains read-only.
