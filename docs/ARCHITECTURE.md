@@ -44,3 +44,9 @@ Only `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/ARCHITECT
 ## Quota boundary model (v2)
 
 Quotas are scoped to `account`, `organization`, `project`, or exact `model`. Account uses legacy `account_scope`; organization/project require non-secret `--quota-scope TYPE=ALIAS` and matching snapshot `scope_id`. SQLite v2 adds scope mappings, backfills v1 events/snapshots, and aggregates reservations across models for shared scopes. Missing bindings or any missing, stale, expired, or mismatched snapshot blocks requests.
+
+## Planned browser-assistant proposal boundary
+
+The next interoperability slice should accept a versioned, size-bounded JSON proposal bundle rather than executing free-form assistant output. A proposal may contain a response summary and proposed file operations, each tied to a repository-relative path and the expected SHA-256 of the current file (or an explicit create operation). Import must reject absolute paths, traversal, symlink escapes, protected runtime state, credential/config secrets, unsupported operations, oversized content, duplicate paths, and stale expected hashes.
+
+Imported bundles are untrusted data, not commands. Stage them only in ignored local workspace storage, retain task/source/context provenance, and provide a read-only diff preview. The first implementation must not execute shell commands, install dependencies, invoke providers, or apply proposed files. Any future apply action must be a separate explicit user-approved operation that rechecks expected hashes immediately before writing; Git commits, pushes, pull requests, and merges remain separately approval-gated. Checksums detect accidental corruption but do not authenticate the assistant or bundle author.
