@@ -38,13 +38,17 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [ ] Add provider-specific quota coverage and measured fail-closed fallback without paid-model substitution.
 
 ## Phase 4: Browser assistant interoperability
-- [ ] Define a versioned, size-bounded proposal bundle for assistant responses and file operations.
-- [ ] Validate repository-relative paths, operation types, expected file hashes, and protected paths before staging.
-- [ ] Store imported proposals privately under ignored local state; preserve task, source, and context provenance.
-- [ ] Generate a read-only diff preview and reject stale or conflicting proposals.
-- [ ] Keep command execution and file application out of the import path; require separate explicit approval for later apply/commit/push actions.
-- [ ] Preserve context and provenance between API and browser sessions.
+- [x] Define a versioned, size-bounded JSON proposal bundle for create/update/delete file operations.
+- [x] Validate repository-relative paths, operation types, expected file hashes, and protected/credential-like paths before staging.
+- [x] Store proposals privately under ignored `.workshop/proposals/` state with source, timestamp, and bundle-hash provenance.
+- [x] Generate read-only diffs, checksum staged records, escape terminal control characters, and reject stale/conflicting previews.
+- [x] Keep command execution and file application out of import/preview; no proposal content is executed or automatically applied.
+- [ ] Design a separately approved file-application transaction with immediate hash rechecks, symlink/race protections, and recoverable multi-file behavior. Do not implement until reviewed.
+- [ ] Preserve task/context provenance between API and browser sessions (current proposal metadata records source, timestamp, and bundle hash only).
 - [ ] Add manual fallback instructions when API quotas are exhausted.
+
+## Proposal apply safety gate (not implemented)
+A future apply operation must be a separate local CLI action, never part of import or preview. It must require the user to identify the exact staged proposal and explicitly approve its reviewed digest; revalidate the staged-record checksum, every path, and every expected file hash immediately before writes; reject symlinks and protected paths again; avoid shell execution and provider calls; and define safe recovery for interrupted multi-file updates. Git commits, pushes, PRs, and merges remain separate approvals. No apply command exists today.
 
 ## Phase 5: Controlled development automation
 - [ ] Add opt-in project checks and isolated execution.
