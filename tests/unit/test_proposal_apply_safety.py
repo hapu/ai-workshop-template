@@ -128,13 +128,13 @@ class ProposalApplyLockTests(unittest.TestCase):
 
     def test_process_exit_releases_os_managed_lock(self) -> None:
         script = (
-            "import os, sys, time\\n"
-            "from workshop.proposal_apply.locking import advisory_lock\\n"
-            "fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY)\\n"
-            "with advisory_lock(fd, sys.argv[2], timeout=2):\\n"
-            " print('READY', flush=True)\\n"
-            " time.sleep(30)\\n"
-            "os.close(fd)\\n"
+            "import os, sys, time\n"
+            "from workshop.proposal_apply.locking import advisory_lock\n"
+            "fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY)\n"
+            "with advisory_lock(fd, sys.argv[2], timeout=2):\n"
+            " print('READY', flush=True)\n"
+            " time.sleep(30)\n"
+            "os.close(fd)\n"
         )
         process = subprocess.Popen(
             [sys.executable, "-c", script, str(self.state), "process.lock"],
