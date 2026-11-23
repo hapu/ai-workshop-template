@@ -49,6 +49,17 @@ class ProposalApplyFilesystemTests(unittest.TestCase):
         with self.assertRaises(FilesystemSafetyError):
             open_repository_root(link)
 
+    def test_root_with_symlinked_ancestor_is_rejected(self) -> None:
+        alias = Path(self.temp.name) / "alias"
+        alias.symlink_to(self.temp.name, target_is_directory=True)
+        with self.assertRaises(FilesystemSafetyError):
+            open_repository_root(alias / "repo")
+
+    def test_fifo_target_is_rejected_without_blocking(self) -> None:
+        os.mkfifo(self.root / "pipe")
+        with self.assertRaises(FilesystemSafetyError):
+            open_regular_file_at(self.root_fd, "pipe")
+
     def test_existing_parent_traversal_and_regular_file_open(self) -> None:
         parent_fd = open_existing_parent(self.root_fd, ["docs"])
         try:
@@ -86,7 +97,7 @@ class ProposalApplyFilesystemTests(unittest.TestCase):
             open_regular_file_at(self.root_fd, "docs")
 
     def test_component_validation_rejects_path_syntax(self) -> None:
-        for name in ("", ".", "..", "a/b", "a\\\\b"):
+        for name in ("", ".", "..", "a/b", "a\\b"):
             with self.subTest(name=name), self.assertRaises(FilesystemSafetyError):
                 open_directory_at(self.root_fd, name)
 
