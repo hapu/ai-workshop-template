@@ -133,6 +133,29 @@ def apply_proposal(
                     output_stream=output_stream,
                 )
 
+                final_state_fd = final_proposal_fd = final_root_fd = None
+                try:
+                    final_state_fd, final_proposal_fd, final_root_fd, final_record, final_operations = (
+                        store.open_for_apply(proposal_id)
+                    )
+                    for before, after, label in (
+                        (state_fd, final_state_fd, "private state"),
+                        (proposal_dir_fd, final_proposal_fd, "proposal directory"),
+                        (repository_root_fd, final_root_fd, "repository root"),
+                    ):
+                        before_id = directory_identity(before)
+                        after_id = directory_identity(after)
+                        if (before_id.device, before_id.inode) != (after_id.device, after_id.inode):
+                            raise ProposalApplyServiceError(f"{label} changed during interactive review")
+                    verify_approval_digest(final_record["record_sha256"], supplied_record_sha256)
+                    if final_operations != operations:
+                        raise ProposalApplyServiceError("Staged operations changed during interactive review")
+                finally:
+                    _close_all((final_state_fd, final_proposal_fd, final_root_fd))
+
+                final_identity = repository_identity(store.repository, repository_root_fd)
+                if final_identity != identity:
+                    raise ProposalApplyServiceError("Repository path identity changed during interactive review")
                 for operation, snapshot in zip(operations, snapshots):
                     proposed = operation.content.encode("utf-8") if operation.content is not None else None
                     current = snapshot_operation(
