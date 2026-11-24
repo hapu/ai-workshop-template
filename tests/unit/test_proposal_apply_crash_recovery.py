@@ -20,6 +20,7 @@ from workshop.proposals import ProposalStore
 class TTY:
     def __init__(self, value: str = "") -> None:
         self.value = value
+        self.output: list[str] = []
 
     def isatty(self) -> bool:
         return True
@@ -29,10 +30,14 @@ class TTY:
         return value
 
     def write(self, value: str) -> int:
+        self.output.append(value)
         return len(value)
 
     def flush(self) -> None:
         pass
+
+    def getvalue(self) -> str:
+        return "".join(self.output)
 
 
 def sha(data: bytes) -> str:
