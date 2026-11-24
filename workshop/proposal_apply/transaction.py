@@ -200,7 +200,7 @@ def _operation_record(index: int, item: PreparedOperation) -> tuple[dict[str, ob
     else:
         if original is None or item.expected_sha256 != _sha256(original):
             raise PreparationError("Original bytes do not match the expected digest")
-        if (type(item.original_mode) is not int or not 0 <= item.original_mode <= 0o7777
+        if (type(item.original_mode) is not int or not 0 <= item.original_mode <= 0o777
                 or not item.original_mode & 0o400
                 or type(item.original_device) is not int or item.original_device < 0
                 or type(item.original_inode) is not int or item.original_inode < 0):
