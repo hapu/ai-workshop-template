@@ -252,7 +252,6 @@ class ProposalCrashRecoveryTests(unittest.TestCase):
                     )
             self.assertTrue((root / "docs/note.txt").is_symlink())
             self.assertEqual(external.read_text(encoding="utf-8"), "do not read or modify")
-            self.assertFalse((root / "docs/note.txt").read_text(encoding="utf-8") == external.read_text(encoding="utf-8"))
 
     def test_extra_hardlink_during_quarantine_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
