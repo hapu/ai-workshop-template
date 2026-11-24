@@ -207,6 +207,12 @@ def _atomic_private_write(path: Path, content: bytes) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temp_name, path)
+        if os.name == "posix" and hasattr(os, "O_DIRECTORY"):
+            directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
     except OSError:
         try:
             os.unlink(temp_name)
@@ -309,6 +315,97 @@ class ProposalStore:
             raise ProposalError("Cannot create a unique private proposal directory") from exc
         _atomic_private_write(directory / "proposal.json", _canonical_json(record))
         return StagedProposal(proposal_id, directory, operations)
+
+    def open_for_apply(
+        self, proposal_id: str
+    ) -> tuple[int, int, int, dict[str, Any], tuple[ProposalOperation, ...]]:
+        """Open and validate a v2 staged proposal through private descriptors.
+
+        The caller owns and must close the returned state, proposal, and root
+        descriptors. The proposal lock must be acquired before relying on the
+        returned record for an apply operation.
+        """
+        if not isinstance(proposal_id, str) or not _ID.fullmatch(proposal_id):
+            raise ProposalError("Invalid proposal ID")
+        state_fd = proposal_fd = root_fd = proposals_fd = None
+        try:
+            state_fd = open_repository_root(self.home)
+            _verify_private_directory(state_fd)
+            proposals_fd = open_private_directory_at(state_fd, "proposals")
+            proposal_fd = open_private_directory_at(proposals_fd, proposal_id)
+            root_fd = open_repository_root(self.repository)
+            os.close(proposals_fd)
+            proposals_fd = None
+
+            raw = read_private_file_at(proposal_fd, "proposal.json", max_bytes=_MAX_BUNDLE_BYTES)
+            try:
+                record = json.loads(raw.decode("utf-8"))
+            except (UnicodeError, json.JSONDecodeError) as exc:
+                raise ProposalError("Staged proposal record is not valid UTF-8 JSON") from exc
+            expected_fields = {
+                "format", "version", "repository_identity", "proposal_id", "source",
+                "created_at", "task_id", "context_sha256", "bundle_sha256",
+                "operations", "previews", "status", "record_sha256",
+            }
+            if not isinstance(record, dict) or set(record) != expected_fields:
+                raise ProposalError("Staged proposal record fields are malformed")
+            if record.get("format") != _FORMAT or type(record.get("version")) is not int:
+                raise ProposalError("Staged proposal format is invalid")
+            if record["version"] != _STAGED_RECORD_VERSION:
+                raise ProposalError("This staged proposal predates repository identity binding; restage it")
+            if record.get("proposal_id") != proposal_id or record.get("status") != "staged_read_only":
+                raise ProposalError("Staged proposal identity or status is invalid")
+            supplied_digest = record.get("record_sha256")
+            if not isinstance(supplied_digest, str) or not hmac.compare_digest(
+                supplied_digest, _record_digest(record)
+            ):
+                raise ProposalError("Staged proposal integrity check failed; do not apply it")
+
+            identity = record.get("repository_identity")
+            root_identity = directory_identity(root_fd)
+            if (not isinstance(identity, dict) or set(identity) != {"root", "device", "inode"}
+                    or identity.get("root") != str(self.repository)
+                    or type(identity.get("device")) is not int
+                    or type(identity.get("inode")) is not int
+                    or identity["device"] != root_identity.device
+                    or identity["inode"] != root_identity.inode):
+                raise ProposalError("Repository identity changed since staging; restage the proposal")
+
+            bundle_payload = {
+                "format": _FORMAT,
+                "version": _BUNDLE_VERSION,
+                "source": record.get("source"),
+                "created_at": record.get("created_at"),
+                "operations": record.get("operations"),
+            }
+            if record.get("task_id") is not None:
+                bundle_payload["task_id"] = record["task_id"]
+            if record.get("context_sha256") is not None:
+                bundle_payload["context_sha256"] = record["context_sha256"]
+            if (not isinstance(record.get("bundle_sha256"), str)
+                    or not hmac.compare_digest(
+                        record["bundle_sha256"], _sha256(_canonical_json(bundle_payload))
+                    )):
+                raise ProposalError("Staged bundle provenance digest is invalid")
+            _, operations = parse_proposal(_canonical_json(bundle_payload))
+            previews = record.get("previews")
+            if not isinstance(previews, list) or len(previews) != len(operations):
+                raise ProposalError("Staged preview does not match its operations")
+            for operation, preview in zip(operations, previews):
+                if (not isinstance(preview, dict) or set(preview) != {"path", "operation", "diff"}
+                        or preview.get("path") != operation.path
+                        or preview.get("operation") != operation.operation
+                        or not isinstance(preview.get("diff"), str)):
+                    raise ProposalError("Staged preview metadata is malformed")
+            return state_fd, proposal_fd, root_fd, record, operations
+        except BaseException:
+            for descriptor in (proposals_fd, proposal_fd, root_fd, state_fd):
+                if descriptor is not None:
+                    try:
+                        os.close(descriptor)
+                    except OSError:
+                        pass
+            raise
 
     def preview(self, proposal_id: str) -> str:
         if not isinstance(proposal_id, str) or not _ID.fullmatch(proposal_id):
