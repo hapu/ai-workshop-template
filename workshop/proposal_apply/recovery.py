@@ -291,6 +291,7 @@ def inventory_transaction(
         unexpected_root_entries = sorted(actual_root_entries - expected_root_entries)
         identity_matches: bool | None = None
         target_states: list[dict[str, Any]] | None = None
+        sibling_states: list[dict[str, Any]] | None = None
         if (repository_root_fd is None) != (repository_root_path is None):
             raise RecoveryInventoryError("Provide both the repository root descriptor and its path")
         if repository_root_fd is not None and repository_root_path is not None:
@@ -311,36 +312,21 @@ def inventory_transaction(
             )
             if identity_matches:
                 target_states = []
+                sibling_states = []
                 for operation in journal["operations"]:
-                    observed = _target_inventory(repository_root_fd, operation)
-                    if observed["state"] == "absent":
-                        observed["matches_original_state"] = operation["op"] == "create"
-                        observed["matches_proposed_state"] = operation["op"] == "delete"
-                        observed["matches_original_identity"] = operation["op"] == "create"
-                    elif observed["state"] == "regular_file":
-                        observed["matches_original_content"] = (
-                            operation["original_sha256"] is not None
-                            and observed["sha256"] == operation["original_sha256"]
-                        )
-                        observed["matches_proposed_content"] = (
-                            operation["proposed_sha256"] is not None
-                            and observed["sha256"] == operation["proposed_sha256"]
-                        )
-                        observed["matches_original_identity"] = (
-                            operation["original_device"] is not None
-                            and observed["device"] == operation["original_device"]
-                            and observed["inode"] == operation["original_inode"]
-                        )
-                        observed["matches_original_state"] = (
-                            observed["matches_original_content"]
-                            and observed["matches_original_identity"]
-                        )
-                        observed["matches_proposed_state"] = observed["matches_proposed_content"]
-                    observed["matches_known_transaction_state"] = (
-                        observed.get("matches_original_state", False)
-                        or observed.get("matches_proposed_state", False)
+                    observed, siblings = _target_and_sibling_inventory(
+                        repository_root_fd, operation, journal["state"]
                     )
+                    if (observed.get("matches_proposed_content")
+                            and not observed.get("matches_proposed_state")):
+                        temporary = next((item for item in siblings if item["role"] == "temporary"), None)
+                        if (temporary is not None and temporary.get("matches_expected")
+                                and temporary.get("device") == observed.get("device")
+                                and temporary.get("inode") == observed.get("inode")):
+                            observed["matches_proposed_state"] = True
+                            observed["matches_known_transaction_state"] = True
                     target_states.append(observed)
+                    sibling_states.append({"path": operation["path"], "entries": siblings})
 
         return {
             "transaction_id": transaction_id,
@@ -358,6 +344,7 @@ def inventory_transaction(
             "unexpected_transaction_entries": unexpected_root_entries,
             "missing_transaction_entries": missing_transaction_entries,
             "targets": target_states,
+            "siblings": sibling_states,
             "private_artifacts_verified": (
                 not missing_backups and not missing_prepared
                 and not unexpected_backups and not unexpected_prepared
