@@ -71,7 +71,24 @@ python3 -m workshop --home .workshop proposal stage proposal.json --project .
 python3 -m workshop --home .workshop proposal preview PROPOSAL_ID --project .
 ```
 
-The proposal ID is printed by the stage command. Staged records are private under `.workshop/proposals/`. Optional `task_id` and `context_sha256` fields link the proposal to a workshop task and the exact bounded context bundle. Compute the context digest with `sha256sum .workshop/context-bundle.md`. Preview verifies the staged-record checksum and rechecks the current repository files against their original preconditions; if any target changed, it rejects the preview and asks you to restage. This version only validates, stages, and displays a read-only diff. It never applies changes, runs commands, installs dependencies, calls providers, or publishes Git changes. SHA-256 detects accidental corruption and stale files; it does not authenticate the proposal author. Review every change independently.
+The proposal ID is printed by the stage command. Staged records are private under `.workshop/proposals/`. Optional `task_id` and `context_sha256` fields link the proposal to a workshop task and the exact bounded context bundle. Compute the context digest with `sha256sum .workshop/context-bundle.md`. Preview verifies the staged-record checksum, rechecks current repository files against their original preconditions, and recomputes diffs from the live snapshot rather than trusting stored preview text.
+
+After reviewing the preview, the POSIX-only apply command requires the full staged-record digest and an interactive exact confirmation:
+
+```bash
+python3 -m workshop --home .workshop proposal apply PROPOSAL_ID \
+  --approve-sha256 FULL_64_CHARACTER_RECORD_SHA256 --project .
+```
+
+The command revalidates repository identity, the staged record, operation content, file hashes, and live snapshots. It uses a private transaction journal, backups, same-directory no-overwrite installation, and automatic rollback on application failure. If a process is interrupted, use the transaction ID printed by the apply command:
+
+```bash
+python3 -m workshop --home .workshop proposal recover TRANSACTION_ID --project .
+```
+
+Recovery displays the journal and target/sibling inventory, then requires a separate exact confirmation bound to the full journal SHA-256. It rolls back interrupted work by default; committed transactions permit cleanup only, never rollback. Unsupported platforms fail closed. Parent directories must already exist. The operation does not execute proposal content, run shell commands, install dependencies, call providers, or perform Git commits/pushes.
+
+Multi-file application is journaled and recoverable, but it is not atomically visible as a group to external observers. Advisory locks coordinate cooperating workshop processes; they cannot prevent a non-cooperating process running as the same user from racing filesystem changes. Review every change independently. SHA-256 detects corruption and binds the confirmation to the exact staged record; it does not authenticate the proposal author.
 
 ## Provider safety gate
 
