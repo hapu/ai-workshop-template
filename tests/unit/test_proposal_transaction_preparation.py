@@ -14,7 +14,7 @@ from workshop.proposal_apply.filesystem import (
     read_private_file_at,
     fsync_directory,
 )
-from workshop.proposal_apply.journal import JournalError, read_journal
+from workshop.proposal_apply.journal import JournalError, read_journal, seal_journal, verify_journal
 from workshop.proposal_apply.recovery import RecoveryInventoryError, inventory_transaction
 from workshop.proposal_apply.transaction import (
     PreparationError,
@@ -172,6 +172,39 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         with self.assertRaises(RecoveryInventoryError):
             inventory_transaction(self.proposal_fd, prepared.transaction_id)
 
+    def test_journal_rejects_malformed_state_and_protected_paths(self) -> None:
+        prepared = self._prepare()
+        transaction_fd = self._open_transaction(prepared.transaction_id)
+        try:
+            journal = read_journal(transaction_fd)
+            malformed_state = dict(journal)
+            malformed_state["state"] = []
+            with self.assertRaises(JournalError):
+                verify_journal(malformed_state)
+            protected_path = dict(journal)
+            protected_path["operations"] = [dict(item) for item in journal["operations"]]
+            protected_path["operations"][0]["path"] = ".git/config"
+            with self.assertRaises(JournalError):
+                seal_journal(protected_path)
+        finally:
+            os.close(transaction_fd)
+
+    def test_inventory_reports_unexpected_private_artifacts(self) -> None:
+        prepared = self._prepare()
+        transaction_fd = self._open_transaction(prepared.transaction_id)
+        try:
+            backups_fd = open_private_directory_at(transaction_fd, "backups")
+            try:
+                extra = self.proposal_dir / "transactions" / prepared.transaction_id / "backups" / "unexpected.bin"
+                extra.write_bytes(b"unrecorded")
+                extra.chmod(0o600)
+            finally:
+                os.close(backups_fd)
+        finally:
+            os.close(transaction_fd)
+        inventory = inventory_transaction(self.proposal_fd, prepared.transaction_id)
+        self.assertEqual(inventory["unexpected_backups"], ["unexpected.bin"])
+        self.assertFalse(inventory["private_artifacts_verified"])
     def test_failed_preparation_leaves_a_preparing_journal_and_targets_unchanged(self) -> None:
         operations = self._prepared_operations()
         with patch("workshop.proposal_apply.transaction.create_private_file_at",
