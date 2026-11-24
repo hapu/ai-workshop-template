@@ -113,7 +113,7 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
     def test_recovery_inventory_is_read_only_and_reports_original_targets(self) -> None:
         prepared = self._prepare()
         inventory = inventory_transaction(
-            self.proposal_fd, prepared.transaction_id, repository_root_fd=self.root_fd
+            self.proposal_fd, prepared.transaction_id, repository_root_fd=self.root_fd, repository_root_path=self.repository
         )
         self.assertEqual(inventory["state"], "PREPARED")
         self.assertTrue(inventory["repository_identity_matches"])
@@ -133,7 +133,7 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         other_fd = open_repository_root(other)
         try:
             inventory = inventory_transaction(
-                self.proposal_fd, prepared.transaction_id, repository_root_fd=other_fd
+                self.proposal_fd, prepared.transaction_id, repository_root_fd=other_fd, repository_root_path=other
             )
             self.assertFalse(inventory["repository_identity_matches"])
             self.assertIsNone(inventory["targets"])
@@ -205,6 +205,7 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         inventory = inventory_transaction(self.proposal_fd, prepared.transaction_id)
         self.assertEqual(inventory["unexpected_backups"], ["unexpected.bin"])
         self.assertFalse(inventory["private_artifacts_verified"])
+
     def test_failed_preparation_leaves_a_preparing_journal_and_targets_unchanged(self) -> None:
         operations = self._prepared_operations()
         with patch("workshop.proposal_apply.transaction.create_private_file_at",
