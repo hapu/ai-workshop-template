@@ -194,6 +194,22 @@ def open_private_directory_at(parent_fd: int, name: str, *, create: bool = False
         raise
 
 
+def create_private_directory_at(parent_fd: int, name: str) -> int:
+    """Create a new private child directory; fail if the name already exists."""
+    name = _component(name)
+    try:
+        os.mkdir(name, 0o700, dir_fd=parent_fd)
+        fsync_directory(parent_fd)
+    except OSError as exc:
+        raise FilesystemSafetyError(f"Cannot exclusively create private directory: {name}") from exc
+    descriptor = open_directory_at(parent_fd, name)
+    try:
+        _verify_private_directory(descriptor)
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
 def fsync_directory(directory_fd: int) -> None:
     """Flush directory metadata or fail explicitly when the filesystem cannot."""
     try:
@@ -221,9 +237,10 @@ def create_private_file_at(directory_fd: int, name: str, content: bytes) -> None
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
     descriptor = os.open(name, flags, 0o600, dir_fd=directory_fd)
     try:
+        os.fchmod(descriptor, 0o600)
         info = os.fstat(descriptor)
         if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
-                or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) & 0o077):
+                or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600):
             raise FilesystemSafetyError("New private file failed ownership or mode checks")
         _write_all(descriptor, content)
         os.fsync(descriptor)
@@ -286,6 +303,7 @@ def replace_private_file_at(directory_fd: int, name: str, content: bytes) -> Non
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
     descriptor = os.open(temporary, flags, 0o600, dir_fd=directory_fd)
     try:
+        os.fchmod(descriptor, 0o600)
         _write_all(descriptor, content)
         os.fsync(descriptor)
     except BaseException:
