@@ -132,6 +132,7 @@ class ProposalApplyEngineTests(unittest.TestCase):
                     proposal_id=self.staged.proposal_id,
                     proposal_sha256=self.record["record_sha256"],
                     operations=self.operations,
+                    snapshots=self.snapshots,
                 )
         self.assertEqual(target.read_bytes(), b"changed after preparation")
         transaction_fd = self._journal()
@@ -155,6 +156,7 @@ class ProposalApplyEngineTests(unittest.TestCase):
                     proposal_id=self.staged.proposal_id,
                     proposal_sha256=self.record["record_sha256"],
                     operations=self.operations,
+                    snapshots=self.snapshots,
                 )
         self.assertEqual((self.root / "docs/note.txt").read_bytes(), b"original note")
         self.assertEqual((self.root / "docs" / quarantine).read_text(encoding="utf-8"), "not ours")
@@ -177,6 +179,7 @@ class ProposalApplyEngineTests(unittest.TestCase):
                         proposal_id=self.staged.proposal_id,
                         proposal_sha256=self.record["record_sha256"],
                         operations=self.operations,
+                        snapshots=self.snapshots,
                     )
         self.assertEqual((self.root / "docs/note.txt").read_bytes(), b"original note")
         self.assertEqual((self.root / "docs/old.txt").read_bytes(), b"remove me")
