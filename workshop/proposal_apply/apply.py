@@ -151,6 +151,13 @@ def rollback_transaction(
         return journal
     if journal["state"] not in {"PREPARING", "PREPARED", "APPLYING", "ROLLING_BACK", "NEEDS_RECOVERY"}:
         raise ApplyError("Transaction state does not permit rollback")
+    identity = directory_identity(repository_root_fd)
+    recorded = journal["repository_identity"]
+    if identity.device != recorded["device"] or identity.inode != recorded["inode"]:
+        raise ApplyError("Repository identity does not match the transaction journal")
+    if journal["state"] in {"PREPARING", "PREPARED"}:
+        journal["state"] = "ROLLED_BACK"
+        return write_journal(transaction_fd, journal)
 
     journal["state"] = "ROLLING_BACK"
     journal = write_journal(transaction_fd, journal)
@@ -212,6 +219,31 @@ def rollback_transaction(
                         and target_info.st_dev == operation["original_device"]
                         and target_info.st_ino == operation["original_inode"]
                     )
+                    restored_is_same = (
+                        _sha256(target_data) == original_digest
+                        and temporary is not None
+                        and temporary[1].st_dev == target_info.st_dev
+                        and temporary[1].st_ino == target_info.st_ino
+                        and _same_identity(
+                            temporary[1], operation.get("temporary_device"), operation.get("temporary_inode")
+                        )
+                    ) or (
+                        _sha256(target_data) == original_digest
+                        and operation.get("status") == "RESTORED"
+                        and _same_identity(
+                            target_info, operation.get("applied_device"), operation.get("applied_inode")
+                        )
+                    )
+                    if restored_is_same:
+                        if temporary is not None:
+                            if not _same_identity(
+                                temporary[1], operation.get("temporary_device"), operation.get("temporary_inode")
+                            ):
+                                raise ApplyError(f"Unverified rollback temporary: {temporary_name}")
+                            unlink_file_at(parent_fd, temporary_name)
+                        operation["status"] = "DONE"
+                        journal = write_journal(transaction_fd, journal)
+                        continue
                     if original_is_same:
                         if quarantine is not None:
                             if (quarantine_info.st_dev, quarantine_info.st_ino) != (
