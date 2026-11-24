@@ -176,7 +176,10 @@ def rollback_transaction(
 
     journal["state"] = "ROLLING_BACK"
     journal = write_journal(transaction_fd, journal)
-    backups_fd = open_private_directory_at(transaction_fd, "backups")
+    try:
+        backups_fd = open_private_directory_at(transaction_fd, "backups")
+    except FilesystemSafetyError:
+        backups_fd = None
     try:
         for index in reversed(range(len(journal["operations"]))):
             operation = journal["operations"][index]
@@ -315,6 +318,8 @@ def rollback_transaction(
                                 raise ApplyError(f"Unexpected temporary file: {temporary_name}")
                             unlink_file_at(parent_fd, temporary_name)
                     else:
+                        if backups_fd is None:
+                            raise ApplyError("Private backup directory is missing; manual recovery is required")
                         backup = _verify_private_payload(
                             backups_fd, operation["backup_file"],
                             original_digest, operation["backup_size"],
