@@ -468,7 +468,7 @@ class ProposalStore:
         previews = record.get("previews")
         if not isinstance(operations, list) or not isinstance(previews, list):
             raise ProposalError("Staged proposal contents are malformed")
-        _, validated_operations = parse_proposal(_canonical_json({
+        bundle_payload = {
             "format": _FORMAT,
             "version": _BUNDLE_VERSION,
             "source": record.get("source"),
@@ -476,7 +476,13 @@ class ProposalStore:
             **({"task_id": record["task_id"]} if record.get("task_id") is not None else {}),
             **({"context_sha256": record["context_sha256"]} if record.get("context_sha256") is not None else {}),
             "operations": operations,
-        }))
+        }
+        if record["version"] == _STAGED_RECORD_VERSION:
+            bundle_digest = record.get("bundle_sha256")
+            if (not isinstance(bundle_digest, str)
+                    or not hmac.compare_digest(bundle_digest, _sha256(_canonical_json(bundle_payload)))):
+                raise ProposalError("Staged bundle provenance digest is invalid")
+        _, validated_operations = parse_proposal(_canonical_json(bundle_payload))
         if len(previews) != len(validated_operations):
             raise ProposalError("Staged proposal preview count does not match its operations")
 
