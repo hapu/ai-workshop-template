@@ -121,6 +121,7 @@ def apply_proposal(
                     operations=snapshots,
                 )
 
+                output_stream.write(f"Prepared transaction ID: {prepared.transaction_id}\n")
                 output_stream.write("Staged proposal preview:\n")
                 for preview in record["previews"]:
                     output_stream.write(f"\n## {preview['operation']}: {preview['path']}\n")
