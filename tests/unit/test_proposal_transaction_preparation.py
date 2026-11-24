@@ -15,6 +15,7 @@ from workshop.proposal_apply.filesystem import (
     fsync_directory,
 )
 from workshop.proposal_apply.journal import JournalError, read_journal, seal_journal, verify_journal
+from workshop.proposal_apply.locking import LockTimeoutError, advisory_lock
 from workshop.proposal_apply.recovery import RecoveryInventoryError, inventory_transaction
 from workshop.proposal_apply.transaction import (
     PreparationError,
@@ -110,6 +111,17 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         self.assertEqual((self.repository / "docs/old.txt").read_bytes(), before["docs/old.txt"])
         self.assertFalse((self.repository / "docs/new.txt").exists())
 
+    def test_repository_lock_timeout_prevents_preparation(self) -> None:
+        with advisory_lock(self.state_fd, "repository.lock", timeout=0.1):
+            with self.assertRaises(LockTimeoutError):
+                prepare_proposal_transaction(
+                    self.state_fd, self.proposal_fd, repository_path=self.repository,
+                    repository_root_fd=self.root_fd, proposal_id=self.proposal_id,
+                    proposal_sha256="b" * 64, operations=self._requests(), timeout=0.02,
+                    transaction_id="f" * 32,
+                )
+        self.assertFalse((self.proposal_dir / "transactions" / ("f" * 32)).exists())
+        self.assertEqual((self.repository / "docs/note.txt").read_bytes(), b"original note")
     def test_journal_contains_validated_operations_and_private_payloads(self) -> None:
         prepared = self._prepare()
         transaction_fd = self._open_transaction(prepared.transaction_id)
