@@ -180,11 +180,18 @@ def rollback_transaction(
                         applied_is_same = _same_identity(
                             target_info, operation.get("applied_device"), operation.get("applied_inode")
                         )
-                        if _sha256(target_data) != proposed_digest or not (temp_is_same or applied_is_same):
+                        temp_recorded = temporary is not None and _same_identity(
+                            temporary[1], operation.get("temporary_device"), operation.get("temporary_inode")
+                        )
+                        if (_sha256(target_data) != proposed_digest
+                                or not (temp_is_same and temp_recorded or applied_is_same)):
                             raise ApplyError(f"Cannot prove create target belongs to this transaction: {operation['path']}")
                         unlink_file_at(parent_fd, target_name)
                     if temporary is not None:
-                        if _sha256(temporary[0]) != proposed_digest:
+                        if (_sha256(temporary[0]) != proposed_digest
+                                or not _same_identity(
+                                    temporary[1], operation.get("temporary_device"), operation.get("temporary_inode")
+                                )):
                             raise ApplyError(f"Unexpected temporary file during create rollback: {temporary_name}")
                         unlink_file_at(parent_fd, temporary_name)
                     operation["status"] = "DONE"
@@ -214,7 +221,10 @@ def rollback_transaction(
                             unlink_file_at(parent_fd, quarantine_name)
                         if temporary is not None:
                             expected_temp_digest = proposed_digest if proposed_digest is not None else original_digest
-                            if _sha256(temporary[0]) != expected_temp_digest:
+                            if (_sha256(temporary[0]) != expected_temp_digest
+                                    or not _same_identity(
+                                        temporary[1], operation.get("temporary_device"), operation.get("temporary_inode")
+                                    )):
                                 raise ApplyError(f"Unexpected temporary file: {temporary_name}")
                             unlink_file_at(parent_fd, temporary_name)
                         operation["status"] = "DONE"
@@ -227,6 +237,9 @@ def rollback_transaction(
                     temp_is_same = temporary is not None and (
                         temporary[1].st_dev == target_info.st_dev
                         and temporary[1].st_ino == target_info.st_ino
+                        and _same_identity(
+                            temporary[1], operation.get("temporary_device"), operation.get("temporary_inode")
+                        )
                     )
                     if (operation["op"] == "update" and _sha256(target_data) == proposed_digest
                             and (applied_is_same or temp_is_same)):
@@ -246,18 +259,35 @@ def rollback_transaction(
                         ):
                             raise ApplyError(f"Could not verify quarantine restoration: {operation['path']}")
                         unlink_file_at(parent_fd, quarantine_name)
+                        if temporary is not None:
+                            expected_temp_digest = proposed_digest if proposed_digest is not None else original_digest
+                            if (_sha256(temporary[0]) != expected_temp_digest
+                                    or not _same_identity(
+                                        temporary[1], operation.get("temporary_device"), operation.get("temporary_inode")
+                                    )):
+                                raise ApplyError(f"Unexpected temporary file: {temporary_name}")
+                            unlink_file_at(parent_fd, temporary_name)
                     else:
                         backup = _verify_private_payload(
                             backups_fd, operation["backup_file"],
                             original_digest, operation["backup_size"],
                         )
                         if temporary is not None:
+                            if not _same_identity(
+                                temporary[1], operation.get("temporary_device"), operation.get("temporary_inode")
+                            ):
+                                raise ApplyError(f"Unverified rollback temporary: {temporary_name}")
                             if _sha256(temporary[0]) != original_digest:
-                                raise ApplyError(f"Unexpected rollback temporary: {temporary_name}")
-                        else:
-                            create_sibling_file_at(
+                                unlink_file_at(parent_fd, temporary_name)
+                                temporary = None
+                        if temporary is None:
+                            temp_info = create_sibling_file_at(
                                 parent_fd, temporary_name, backup, operation["original_mode"]
                             )
+                            operation["temporary_device"] = temp_info.st_dev
+                            operation["temporary_inode"] = temp_info.st_ino
+                            operation["status"] = "RESTORED"
+                            journal = write_journal(transaction_fd, journal)
                         link_file_at(parent_fd, temporary_name, target_name)
                         restored = _entry(parent_fd, target_name)
                         temp_now = _entry(parent_fd, temporary_name)
@@ -269,7 +299,7 @@ def rollback_transaction(
                             raise ApplyError(f"Could not verify backup restoration: {operation['path']}")
                         operation["applied_device"] = restored[1].st_dev
                         operation["applied_inode"] = restored[1].st_ino
-                        operation["status"] = "INSTALLED"
+                        operation["status"] = "RESTORED"
                         journal = write_journal(transaction_fd, journal)
                         unlink_file_at(parent_fd, temporary_name)
                 operation["status"] = "DONE"
@@ -343,7 +373,9 @@ def apply_prepared_transaction(
                                 operation["proposed_sha256"], operation["prepared_size"],
                             )
                             mode = operation["original_mode"] if operation["op"] == "update" else 0o644
-                            create_sibling_file_at(parent_fd, operation["temporary_name"], proposed, mode)
+                            temp_info = create_sibling_file_at(parent_fd, operation["temporary_name"], proposed, mode)
+                            operation["temporary_device"] = temp_info.st_dev
+                            operation["temporary_inode"] = temp_info.st_ino
                             operation["status"] = "TEMP_READY"
                             journal = write_journal(transaction_fd, journal)
 
