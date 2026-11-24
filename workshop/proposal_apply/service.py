@@ -20,7 +20,7 @@ from .transaction import (
     repository_identity,
     snapshot_operation,
 )
-from ..proposals import ProposalError, ProposalStore, _safe_display
+from ..proposals import ProposalError, ProposalStore, _render_diff, _safe_display
 
 
 class ProposalApplyServiceError(RuntimeError):
@@ -122,11 +122,13 @@ def apply_proposal(
                 )
 
                 output_stream.write(f"Prepared transaction ID: {prepared.transaction_id}\n")
-                output_stream.write("Staged proposal preview:\n")
-                for preview in record["previews"]:
-                    output_stream.write(f"\n## {preview['operation']}: {preview['path']}\n")
-                    output_stream.write(_safe_display(preview["diff"]) or "(no textual changes)")
-                    if not preview["diff"].endswith("\n"):
+                output_stream.write("Staged proposal preview (recomputed from the current snapshot):\n")
+                for operation, snapshot in zip(operations, snapshots):
+                    old_text = snapshot.original_content.decode("utf-8") if snapshot.original_content is not None else ""
+                    diff = _render_diff(operation, old_text, snapshot.original_content is not None)
+                    output_stream.write(f"\n## {operation.operation}: {operation.path}\n")
+                    output_stream.write(_safe_display(diff) or "(no textual changes)")
+                    if diff and not diff.endswith("\n"):
                         output_stream.write("\n")
                 confirm_interactive(
                     proposal_id,
