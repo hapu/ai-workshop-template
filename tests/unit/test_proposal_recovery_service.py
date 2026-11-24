@@ -161,6 +161,46 @@ class ProposalRecoveryServiceTests(unittest.TestCase):
         self.assertEqual(state, "ROLLED_BACK")
         self.assertEqual((self.root / "README.md").read_bytes(), b"original")
 
+    def test_recovery_restores_target_after_interrupted_quarantine_install(self) -> None:
+        from workshop.proposal_apply import apply as apply_module
+
+        original_link = apply_module.link_file_at
+
+        def fail_install(parent_fd: int, source: str, destination: str) -> None:
+            if destination == "README.md":
+                raise OSError("simulated crash after original target was quarantined")
+            original_link(parent_fd, source, destination)
+
+        output = TTY()
+        with patch("workshop.proposal_apply.apply.link_file_at", side_effect=fail_install):
+            with patch(
+                "workshop.proposal_apply.apply.rollback_transaction",
+                side_effect=ApplyError("simulated rollback interruption"),
+            ):
+                with self.assertRaises(ProposalApplyServiceError):
+                    apply_proposal(
+                        self.store, self.staged.proposal_id, self.digest,
+                        input_stream=TTY(f"APPLY {self.staged.proposal_id} {self.digest}\n"),
+                        output_stream=output,
+                    )
+        marker = "Prepared transaction ID: "
+        transaction_id = next(
+            line.split(marker, 1)[1]
+            for line in output.getvalue().splitlines()
+            if line.startswith(marker)
+        )
+        journal = self._journal(transaction_id)
+        self.assertEqual(journal["state"], "NEEDS_RECOVERY")
+        self.assertFalse((self.root / "README.md").exists())
+
+        confirmation = f"ROLLBACK {transaction_id} {journal['journal_sha256']}\n"
+        state, _ = recover_proposal_transaction(
+            self.store, transaction_id,
+            input_stream=TTY(confirmation), output_stream=TTY(),
+        )
+        self.assertEqual(state, "ROLLED_BACK")
+        self.assertEqual((self.root / "README.md").read_bytes(), b"original")
+
     def test_committed_recovery_is_cleanup_only(self) -> None:
         # A successful apply normally cleans quarantine entries. The cleanup
         # path is tested by invoking recovery on the already committed journal.
