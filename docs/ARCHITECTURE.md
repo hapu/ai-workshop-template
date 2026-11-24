@@ -4,45 +4,40 @@ Current executable architecture and extension points.
 
 ## Overview
 
-A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded context bundles, and portable handoffs. Provider requests pass through a fail-closed policy gate and local quota ledger. The OpenRouter adapter exists, but the approved model catalog remains empty by default.
+A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded context, handoffs, provider policy, quota accounting, and browser-assistant proposals. Provider requests pass through a fail-closed policy gate and local quota ledger. OpenRouter is the first adapter; the approved model catalog remains empty by default.
 
 ## Current components
 
-- `workshop/cli.py` - task, context, provider-policy, proposal staging/preview, and proposal apply/recovery commands.
-- `workshop/models.py`, `task_store.py` - task/checkpoint models and JSON persistence.
-- `workshop/context_manager.py` - allowlisted context, symlink containment, and word budgets.
-- `workshop/proposals.py` - bounded untrusted proposal validation, repository identity binding, expected-hash checks, private staging, and read-only diffs.
-- `workshop/proposal_apply/` - POSIX-only approval, descriptor-relative filesystem access, advisory locks, durable journals, private transaction preparation, no-overwrite application, rollback, recovery inventory, and interactive recovery.
-- `workshop/handoff.py` - Markdown handoffs with checkpoint state.
-- `workshop/providers/base.py` - provider-neutral message, response, and adapter protocol.
-- `policy.py` - strict catalog parsing and fail-closed free-tier preflight.
-- `reconciliation.py` - validation and normalization of provider quota snapshots.
-- `usage_ledger.py` - SQLite snapshots and atomic reservations across account, organization, project, and model scopes.
-- `runner.py` - supported adapter invocation path; authorizes and reserves before calling `complete`.
-- `openrouter.py` - standard-library Chat Completions adapter; no retries or provider/model fallback.
+- `workshop/cli.py` - task, context, provider, proposal staging/preview, apply, and recovery commands.
+- `models.py`, `task_store.py` - task/checkpoint models and JSON persistence.
+- `context_manager.py`, `handoff.py` - allowlisted context bundles and resumable assistant handoffs.
+- `proposals.py` - bounded untrusted bundle validation, repository identity binding, private staging, and read-only diffs.
+- `proposal_apply/` - POSIX filesystem primitives, approval, advisory locks, journals, backups, no-overwrite application, rollback, and recovery.
+- `providers/base.py`, `policy.py` - provider-neutral contracts and fail-closed model eligibility.
+- `reconciliation.py`, `usage_ledger.py` - external quota snapshots and atomic SQLite reservations.
+- `runner.py` - shared gate and reservation before adapter execution.
+- `openrouter.py` - exact model pinning, no retries, and no provider fallback.
 - `config/provider-catalog.example.json` - empty catalog example; no model is pre-approved.
 - `.workshop/` - private local state, ignored by Git.
 
-## Task persistence
+## Task and context persistence
 
-Task files use unique same-directory temporary files, fsync, and atomic replacement. Per-task locks serialize cross-process updates. Recovery removes old orphaned temporary files but never promotes incomplete writes. Versioned bundles enforce a 1 MiB cap, schema validation, SHA-256 integrity checks, and no-overwrite imports.
+Task files use unique same-directory temporary files, fsync, and atomic replacement. Per-task locks serialize cross-process updates. Recovery removes old orphaned temporary files but never promotes incomplete writes. Versioned task bundles enforce size limits, schema validation, SHA-256 integrity, and no-overwrite imports.
 
-## Provider policy
+Context includes only `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/ARCHITECTURE.md`, and `docs/WORKFLOW.md`. Per-file and aggregate word budgets apply; symlinks resolving outside the project root are rejected.
 
-A model must be enabled, verified, in-date, region-eligible, linked to official HTTPS pricing/terms, priced at exactly zero, and within token limits. Unknown policies are denied. The local catalog is gitignored. Every adapter must use the shared gate; OpenRouter pins the exact catalog model and disables provider fallbacks.
+## Provider policy and quota boundaries
 
-## Context policy
+A model must be enabled, verified, in-date, region-eligible, linked to official HTTPS pricing/terms, priced at exactly zero, and within token limits. Unknown policies are denied. Every adapter must use the shared gate. Quotas may be scoped to account, organization, project, or exact model; missing, stale, expired, or mismatched snapshots block requests. SQLite combines imported usage with later local reservations. Usage from other devices and browser tools is not automatically visible.
 
-Only `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/ARCHITECTURE.md`, and `docs/WORKFLOW.md` are included. Per-file and aggregate word budgets apply; symlinks resolving outside the project root are rejected.
+## Browser-assistant proposal workflow
 
-## Quota boundaries and constraints
+Proposal bundles are untrusted data, never executable instructions. Validation rejects unsafe paths, symlinks, protected/credential-like paths, duplicate targets, oversized content, and stale hashes. Staged records bind repository path/device/inode identity and preserve optional task/context provenance without copying context contents.
 
-Quotas may be scoped to account, organization, project, or exact model. Organization/project scopes require non-secret aliases and matching snapshot IDs. SQLite v2 migrates legacy records and aggregates reservations across shared scopes. Missing, stale, expired, or mismatched snapshots block requests. External usage from other devices or browser tools is not automatically visible.
+Application is separate from import and preview. On POSIX it requires the complete staged-record SHA-256 and exact interactive confirmation. It revalidates target snapshots and uses descriptor-relative no-follow operations, private locks, durable journals/backups, and no-overwrite installation. Application failures trigger rollback; interrupted transactions require separate interactive recovery bound to the journal digest. Committed transactions permit cleanup only. Missing parent directories are rejected.
 
-The runtime targets Python 3.10+ and the standard library. No paid usage is allowed without explicit approval. Automatic cross-device reconciliation is not implemented. OpenRouter inference remains unavailable until a verified local policy and fresh quota snapshots exist. Keep the runtime suitable for a low-memory Chromebook; avoid Docker, local LLMs, and heavy databases.
+Multi-file application is recoverable, not globally atomic to external observers. Advisory locks coordinate cooperating processes only. Proposal content is never executed; apply/recovery do not run shell commands, install dependencies, call providers, or perform Git writes. Commits, pushes, pull requests, and merges remain separately approved.
 
-## Browser-assistant proposal boundary
+## Runtime constraints
 
-The importer accepts a versioned, size-bounded JSON bundle, not executable assistant output. Each operation names a repository-relative path and expected SHA-256 of the current file, or explicitly declares a new file. Validation rejects absolute paths, traversal, symlinks, protected state, credential-like paths, unsupported operations, duplicate paths, oversized content, and stale hashes. Staged records bind the canonical repository path/device/inode identity and carry integrity checksums. Optional task IDs and context-bundle SHA-256 values preserve provenance without copying context contents. Checksums detect accidental corruption, not author identity.
-
-Proposal application is separate from import and preview. On POSIX, it requires the complete staged-record SHA-256 and exact interactive confirmation, revalidates repository identity and target snapshots, and uses descriptor-relative no-follow operations, private locks, durable journals/backups, and no-overwrite installation. Application failures trigger rollback; interrupted transactions are recovered through a separate interactive command bound to the journal SHA-256. Committed transactions permit cleanup only. Missing parent directories are rejected. The workflow does not execute proposal content, run shell commands, install dependencies, call providers, or perform Git writes. Multi-file application is recoverable but not globally atomic to external observers; advisory locks coordinate cooperating processes only. Commits, pushes, pull requests, and merges remain separate approval-gated actions.
+Target Python 3.10+ and the standard library. Keep the runtime suitable for a low-memory Chromebook; avoid Docker, local LLMs, and heavy databases. No paid usage without explicit approval.
