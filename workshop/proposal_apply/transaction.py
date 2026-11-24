@@ -292,6 +292,8 @@ def prepare_transaction(
             "applied_inode": None,
             "quarantine_device": None,
             "quarantine_inode": None,
+            "temporary_device": None,
+            "temporary_inode": None,
         })
         records.append(record)
         payloads.append((backup, prepared))
