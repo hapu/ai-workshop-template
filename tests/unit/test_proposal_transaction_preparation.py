@@ -157,7 +157,7 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         finally:
             os.close(transaction_fd)
         inventory = inventory_transaction(
-            self.proposal_fd, prepared.transaction_id, repository_root_fd=self.root_fd
+            self.proposal_fd, prepared.transaction_id, repository_root_fd=self.root_fd, repository_root_path=self.repository
         )
         self.assertEqual(inventory["missing_backups"], ["0003.bin"])
         self.assertFalse(inventory["private_artifacts_verified"])
