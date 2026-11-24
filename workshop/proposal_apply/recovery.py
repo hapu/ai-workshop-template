@@ -77,12 +77,14 @@ def _target_inventory(repository_root_fd: int, operation: dict[str, Any]) -> dic
             if info.st_size > 65536:
                 return {"path": operation["path"], "state": "oversized"}
             chunks: list[bytes] = []
+            total = 0
             while True:
                 chunk = os.read(descriptor, 65536)
                 if not chunk:
                     break
                 chunks.append(chunk)
-                if sum(map(len, chunks)) > 65536:
+                total += len(chunk)
+                if total > 65536:
                     return {"path": operation["path"], "state": "oversized"}
             after = os.fstat(descriptor)
             content = b"".join(chunks)
@@ -193,12 +195,11 @@ def inventory_transaction(
             "unexpected_prepared": unexpected_prepared,
             "unexpected_transaction_entries": unexpected_root_entries,
             "targets": target_states,
-            "safe_to_continue_inspection": (
+            "private_artifacts_verified": (
                 not missing_backups and not missing_prepared
                 and not unexpected_backups and not unexpected_prepared
                 and not unexpected_root_entries
                 and all(item.get("matches_journal", False) for item in backups + prepared)
-                and identity_matches is not False
             ),
         }
     finally:
