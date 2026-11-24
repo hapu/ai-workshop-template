@@ -5,7 +5,7 @@ import hashlib
 import os
 import stat
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Sequence
 
 from .filesystem import (
     FilesystemSafetyError,
@@ -20,6 +20,7 @@ from .filesystem import (
     unlink_file_at,
 )
 from .journal import JournalError, read_journal, write_journal
+from ..proposals import ProposalOperation
 
 
 class ApplyError(RuntimeError):
@@ -359,6 +360,7 @@ def apply_prepared_transaction(
     *,
     proposal_id: str,
     proposal_sha256: str,
+    operations: Sequence[ProposalOperation],
 ) -> ApplyResult:
     """Apply a PREPARED transaction after interactive approval has succeeded.
 
@@ -376,6 +378,15 @@ def apply_prepared_transaction(
                 or journal["proposal_id"] != proposal_id
                 or journal["proposal_sha256"] != proposal_sha256):
             raise ApplyError("Prepared transaction does not match the approved proposal")
+        if len(operations) != len(journal["operations"]):
+            raise ApplyError("Prepared operation count differs from the approved staged proposal")
+        for staged, prepared in zip(operations, journal["operations"]):
+            proposed = staged.content.encode("utf-8") if staged.content is not None else None
+            proposed_digest = _sha256(proposed) if proposed is not None else None
+            if (staged.operation != prepared["op"] or staged.path != prepared["path"]
+                    or staged.expected_sha256 != prepared["expected_sha256"]
+                    or proposed_digest != prepared["proposed_sha256"]):
+                raise ApplyError("Prepared journal operations differ from the approved staged proposal")
         recorded = journal["repository_identity"]
         identity = directory_identity(repository_root_fd)
         if identity.device != recorded["device"] or identity.inode != recorded["inode"]:
