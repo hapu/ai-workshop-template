@@ -288,6 +288,22 @@ class ProposalStore:
             "inode": root_info.st_ino,
         }
         proposal_id = uuid.uuid4().hex
+        normalized_operations = [
+            {"op": op.operation, "path": op.path, "expected_sha256": op.expected_sha256,
+             "content": op.content}
+            for op in operations
+        ]
+        normalized_bundle = {
+            "format": _FORMAT,
+            "version": _BUNDLE_VERSION,
+            "source": payload["source"],
+            "created_at": payload["created_at"],
+            "operations": normalized_operations,
+        }
+        if payload.get("task_id") is not None:
+            normalized_bundle["task_id"] = payload["task_id"]
+        if payload.get("context_sha256") is not None:
+            normalized_bundle["context_sha256"] = payload["context_sha256"]
         record = {
             "format": _FORMAT,
             "version": _STAGED_RECORD_VERSION,
@@ -297,12 +313,8 @@ class ProposalStore:
             "created_at": payload["created_at"],
             "task_id": payload.get("task_id"),
             "context_sha256": payload.get("context_sha256"),
-            "bundle_sha256": _sha256(_canonical_json(payload)),
-            "operations": [
-                {"op": op.operation, "path": op.path, "expected_sha256": op.expected_sha256,
-                 "content": op.content}
-                for op in operations
-            ],
+            "bundle_sha256": _sha256(_canonical_json(normalized_bundle)),
+            "operations": normalized_operations,
             "previews": previews,
             "status": "staged_read_only",
         }
