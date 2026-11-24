@@ -62,6 +62,18 @@ class StagedProposal:
     operations: tuple[ProposalOperation, ...]
 
 
+def _render_diff(operation: ProposalOperation, old_text: str, exists: bool) -> str:
+    new_text = operation.content or ""
+    if operation.operation == "delete":
+        new_text = ""
+    return "".join(difflib.unified_diff(
+        old_text.splitlines(keepends=True),
+        new_text.splitlines(keepends=True),
+        fromfile=f"a/{operation.path}" if exists else "/dev/null",
+        tofile=f"b/{operation.path}" if operation.operation != "delete" else "/dev/null",
+    ))
+
+
 def _canonical_json(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
@@ -261,15 +273,7 @@ class ProposalStore:
                     old = current.decode("utf-8")
                 except UnicodeError as exc:
                     raise ProposalError(f"Existing target is not UTF-8 text: {operation.path}") from exc
-            new = operation.content or ""
-            if operation.operation == "delete":
-                new = ""
-            diff = "".join(difflib.unified_diff(
-                old.splitlines(keepends=True),
-                new.splitlines(keepends=True),
-                fromfile=f"a/{operation.path}" if exists else "/dev/null",
-                tofile=f"b/{operation.path}" if operation.operation != "delete" else "/dev/null",
-            ))
+            diff = _render_diff(operation, old, exists)
             previews.append({"path": operation.path, "operation": operation.operation, "diff": diff})
 
         self.home.mkdir(parents=True, exist_ok=True)
@@ -477,25 +481,38 @@ class ProposalStore:
             raise ProposalError("Staged proposal preview count does not match its operations")
 
         stale: list[str] = []
+        rendered_previews: list[dict[str, str]] = []
         for operation, item in zip(validated_operations, previews):
             if (not isinstance(item, dict) or item.get("operation") != operation.operation
                     or item.get("path") != operation.path or not isinstance(item.get("diff"), str)):
                 raise ProposalError("Staged proposal preview does not match its operation")
             _, target = _safe_path(self.repository, operation.path)
             exists = target.exists()
+            old_text = ""
             if operation.operation == "create":
                 if exists:
                     stale.append(f"{operation.path}: target now exists")
             elif not exists or not target.is_file():
                 stale.append(f"{operation.path}: expected file is now missing")
+                continue
             else:
                 try:
                     if target.stat().st_size > _MAX_FILE_BYTES:
                         stale.append(f"{operation.path}: current file exceeds the review size limit")
-                    elif _sha256(target.read_bytes()) != operation.expected_sha256:
+                        continue
+                    current = target.read_bytes()
+                    if _sha256(current) != operation.expected_sha256:
                         stale.append(f"{operation.path}: file changed after staging")
-                except OSError as exc:
+                        continue
+                    old_text = current.decode("utf-8")
+                except (OSError, UnicodeError) as exc:
                     stale.append(f"{operation.path}: cannot verify current file ({exc})")
+                    continue
+            rendered_previews.append({
+                "path": operation.path,
+                "operation": operation.operation,
+                "diff": _render_diff(operation, old_text, exists),
+            })
         if stale:
             details = "; ".join(stale)
             raise ProposalError(f"Staged proposal is stale; discard and restage it: {details}")
@@ -510,7 +527,7 @@ class ProposalStore:
             "Status: staged_read_only (repository files were not changed)",
             "Freshness: current repository files still match the staged preconditions",
         ]
-        for item in previews:
+        for item in rendered_previews:
             if not isinstance(item, dict) or not all(
                 isinstance(item.get(key), str) for key in ("operation", "path", "diff")
             ):
