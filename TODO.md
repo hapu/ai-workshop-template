@@ -1,39 +1,27 @@
-# TODO
+# TODO — SAT XML Manager test
 
-Prioritized template-maintenance backlog. Keep exactly one active task under **Now**. A checked item belongs in **Completed**, not in an active queue.
+Keep one active task under **Now**. Separate confirmed evidence from assumptions.
 
 ## Now
-- [ ] Complete stage-4 crash-injection and adversarial recovery tests for draft PR #25; rerun CI on the exact head before review or merge.
+- [ ] Identify and inspect the actual SAT XML Manager source repository/revision; establish a reproducible baseline before editing.
 
 ## Next
-- [ ] Review and accept PR #25 only after every stage-4 acceptance test passes on Python 3.10–3.13.
-- [ ] Add manual fallback instructions for when browser/API quotas are exhausted.
-- [ ] Add provider-specific quota refresh for remaining dimensions only where safe official APIs expose them.
-- [ ] Verify actual OpenRouter account/project quotas, external usage, region, model eligibility, and billing safeguards before adding any enabled model policy.
-- [ ] Add measured, fail-closed fallback only between independently verified free models; never substitute a paid or unknown model.
-- [ ] Consider encrypted ledger export/import or a shared multi-device ledger.
-- [ ] Reconcile usage from other devices and browser/API tools before enabling any adapter.
+- [ ] Reproduce the SAT `FechaFinal` rejection and trace the exact frontend payload through Flask to sanitized SOAP serialization.
+- [ ] Determine why the local endpoint maps the SAT business rejection to HTTP 502; define correct response mapping.
+- [ ] Identify the exact URL, method, and initiator for the independent 404.
+- [ ] Inventory tests, coverage, dependency versions, security controls, and Chromebook runtime constraints.
+- [ ] Produce a prioritized gap analysis of the app and the workshop workflow based on evidence.
 
 ## Later
-- [ ] Add opt-in project checks and isolated execution.
-- [ ] Add branch preparation and approval-gated pull-request helpers.
-- [ ] Add rollback/recovery procedures for approved Git operations.
-- [ ] Add scheduled provider re-verification and end-to-end tests for routing, free-only enforcement, and recovery.
+- [ ] Add date parsing, boundaries, ordering, and SAT serialization regression tests.
+- [ ] Audit SAT authentication, request lifecycle, polling, ZIP retrieval, multi-RFC isolation, and credential lifecycle.
+- [ ] Verify import/deduplication, managed RFC separation, six-sheet Excel export, and partial-payment/currency behavior.
+- [ ] Review SQLite backup/restore, release packaging, resource usage, and operational recovery.
 
-## Blocked / decision required
-- [ ] Add a second provider only after OpenRouter account-level eligibility, quotas, external usage, and no-billing safeguards are verified.
-- [ ] Decide whether cross-device quota sharing is worth its synchronization and privacy costs.
+## Blocked
+- [ ] Application implementation and automated tests are blocked until the actual source repository or archive is available.
+- [ ] Live SAT integration tests are blocked pending a safe test strategy; never use real e.firma secrets in AI prompts or repository fixtures.
 
 ## Completed
-- [x] Python 3.10+ standard-library CLI, task/checkpoint persistence, atomic writes, locking, recovery, and checksummed portable bundles.
-- [x] Allowlisted bounded context, symlink containment, and resumable handoffs.
-- [x] Provider-neutral contract, empty-by-default model catalog, fail-closed policy, SQLite quota ledger, and atomic reservations.
-- [x] External quota snapshot reconciliation, OpenRouter key-status refresh, Groq header reconciliation, and sanitized OpenRouter rate-limit diagnostics.
-- [x] OpenRouter adapter behind the shared quota gate, with exact model pinning, no retries, and no provider fallback.
-- [x] Safe proposal intake: bounded versioned bundles, path/protected-file checks, expected hashes, private staging, integrity checks, stale-preview rejection, and recomputed terminal-safe diffs.
-- [x] Optional task ID and context-bundle SHA-256 provenance for proposals.
-- [x] Approve the proposal-application safety design with POSIX, rollback, existing-parent-only, and interactive-approval decisions.
-- [x] Stage 1 POSIX filesystem primitives and advisory locks; merged by PR #23 into the design branch.
-- [x] Stage 2 canonical journal, durable private backup/prepared payloads, lock-held snapshots, and read-only recovery inventory; merged by PR #24 into the design branch.
-- [ ] Stage 3 interactive approval, no-overwrite application, rollback, and explicit recovery; implemented in draft PR #25, pending stage-4 validation and review.
-- [x] Protected main branch, required Python 3.10–3.13 CI, and squash-only PR workflow.
+- [x] Created isolated workshop branch `test/sat-xml-manager` from `main`.
+- [x] Recorded the project handoff, reported defects, constraints, and first investigation criteria.
