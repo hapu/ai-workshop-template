@@ -32,8 +32,9 @@ _OPERATION_KEYS = {
 _OPERATION_PROGRESS_KEYS = {
     "quarantine_name", "temporary_name", "status", "applied_device",
     "applied_inode", "quarantine_device", "quarantine_inode",
+    "temporary_device", "temporary_inode",
 }
-_PROGRESS_STATES = {"PENDING", "TEMP_READY", "QUARANTINED", "TARGET_REMOVED", "INSTALLED", "DONE"}
+_PROGRESS_STATES = {"PENDING", "TEMP_READY", "QUARANTINED", "TARGET_REMOVED", "INSTALLED", "RESTORED", "DONE"}
 
 
 class JournalError(ValueError):
@@ -200,6 +201,8 @@ def validate_journal(value: object) -> dict[str, Any]:
             applied_inode = operation.get("applied_inode")
             quarantine_device = operation.get("quarantine_device")
             quarantine_inode = operation.get("quarantine_inode")
+            temporary_device = operation.get("temporary_device")
+            temporary_inode = operation.get("temporary_inode")
             if (not _is_optional_nonnegative_int(applied_device)
                     or not _is_optional_nonnegative_int(applied_inode)
                     or (applied_device is None) != (applied_inode is None)):
@@ -210,6 +213,10 @@ def validate_journal(value: object) -> dict[str, Any]:
                 raise JournalError("Quarantine identity is invalid")
             if op == "create" and (quarantine_device is not None or quarantine_inode is not None):
                 raise JournalError("Create operation cannot have a quarantine identity")
+            if (not _is_optional_nonnegative_int(temporary_device)
+                    or not _is_optional_nonnegative_int(temporary_inode)
+                    or (temporary_device is None) != (temporary_inode is None)):
+                raise JournalError("Temporary sibling identity is invalid")
     if not _is_sha(value.get("journal_sha256")):
         raise JournalError("Journal integrity digest is missing or malformed")
     return value
