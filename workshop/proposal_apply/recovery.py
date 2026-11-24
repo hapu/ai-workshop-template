@@ -151,7 +151,7 @@ def _target_and_sibling_inventory(
     try:
         target = _target_inventory(repository_root_fd, operation)
         temporary_digest = (
-            operation["original_sha256"] if operation.get("status") == "RESTORED"
+            operation["original_sha256"] if operation.get("status") in {"RESTORED", "DONE"}
             else operation["proposed_sha256"] if operation["proposed_sha256"] is not None
             else operation["original_sha256"]
         )
