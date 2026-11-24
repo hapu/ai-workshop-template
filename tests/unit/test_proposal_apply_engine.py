@@ -76,6 +76,7 @@ class ProposalApplyEngineTests(unittest.TestCase):
                 self.prepared.transaction_id,
                 proposal_id=self.staged.proposal_id,
                 proposal_sha256=self.record["record_sha256"],
+                repository_root_path=self.root,
                 operations=self.operations,
             )
 
@@ -107,6 +108,7 @@ class ProposalApplyEngineTests(unittest.TestCase):
                     self.proposal_fd, self.root_fd, self.prepared.transaction_id,
                     proposal_id=self.staged.proposal_id,
                     proposal_sha256=self.record["record_sha256"],
+                    repository_root_path=self.root,
                     operations=self.operations,
                 )
         self.assertEqual((self.root / "docs/note.txt").read_bytes(), b"updated note")
@@ -174,7 +176,7 @@ class ProposalApplyEngineTests(unittest.TestCase):
         try:
             journal = read_journal(transaction_fd)
             self.assertEqual(journal["state"], "ROLLED_BACK")
-            self.assertEqual(rollback_transaction(transaction_fd, self.root_fd)["state"], "ROLLED_BACK")
+            self.assertEqual(rollback_transaction(transaction_fd, self.root_fd, repository_root_path=self.root)["state"], "ROLLED_BACK")
         finally:
             os.close(transaction_fd)
 
