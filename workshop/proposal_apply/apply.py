@@ -489,13 +489,20 @@ def apply_prepared_transaction(
                 except BaseException as exc:
                     try:
                         current = read_journal(transaction_fd)
-                        if current["state"] == "COMMITTED":
-                            raise ApplyError(
-                                "Commit marker exists but final durability could not be confirmed; inspect recovery"
-                            ) from exc
+                    except BaseException as journal_exc:
+                        _mark_needs_recovery(transaction_fd, journal)
+                        raise ApplyError(
+                            f"Application failed and journal cannot be verified: {journal_exc}"
+                        ) from exc
+                    if current["state"] == "COMMITTED":
+                        _mark_needs_recovery(transaction_fd, current)
+                        raise ApplyError(
+                            "Commit marker exists but final durability could not be confirmed; inspect recovery"
+                        ) from exc
+                    try:
                         rollback_transaction(transaction_fd, repository_root_fd)
                     except BaseException as rollback_exc:
-                        _mark_needs_recovery(transaction_fd, journal)
+                        _mark_needs_recovery(transaction_fd, current)
                         raise ApplyError(
                             f"Application failed and rollback needs recovery: {rollback_exc}"
                         ) from exc
