@@ -30,6 +30,7 @@ from .providers.reconciliation import (
 from .providers.usage_ledger import QuotaExceeded, UsageLedger, UsageLedgerError
 from .task_store import TaskStore, TaskStoreError
 from .proposals import ProposalError, ProposalStore
+from .proposal_apply.service import ProposalApplyServiceError, apply_proposal
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -95,6 +96,10 @@ def _parser() -> argparse.ArgumentParser:
     proposal_preview = proposal_commands.add_parser("preview", help="show a read-only diff for a staged proposal")
     proposal_preview.add_argument("proposal_id")
     proposal_preview.add_argument("--project", default=".", help="repository root (default: current directory)")
+    proposal_apply = proposal_commands.add_parser("apply", help="apply a staged proposal after interactive digest approval")
+    proposal_apply.add_argument("proposal_id")
+    proposal_apply.add_argument("--approve-sha256", required=True, help="full staged-record SHA-256 digest to approve")
+    proposal_apply.add_argument("--project", default=".", help="repository root (default: current directory)")
 
     provider = commands.add_parser("provider", help="inspect provider policies and run a zero-cost preflight")
     provider_commands = provider.add_subparsers(dest="provider_command", required=True)
@@ -541,6 +546,12 @@ def _run_proposal(args: argparse.Namespace, home: str) -> int:
     if args.proposal_command == "preview":
         sys.stdout.write(store.preview(args.proposal_id))
         return 0
+    if args.proposal_command == "apply":
+        result = apply_proposal(
+            store, args.proposal_id, args.approve_sha256,
+            input_stream=sys.stdin, output_stream=sys.stdout,
+        )
+        return 0 if result.state == "COMMITTED" else 2
     return 2
 
 
@@ -577,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "proposal":
             return _run_proposal(args, args.home)
         return _run_task(args, TaskStore(args.home))
-    except (TaskStoreError, ContextError, ProviderCatalogError, UsageLedgerError, ProposalError) as exc:
+    except (TaskStoreError, ContextError, ProviderCatalogError, UsageLedgerError, ProposalError, ProposalApplyServiceError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     except OSError as exc:
