@@ -163,13 +163,18 @@ def apply_proposal(
                     raise ProposalApplyServiceError("Repository path identity changed during interactive review")
                 for operation, snapshot in zip(operations, snapshots):
                     proposed = operation.content.encode("utf-8") if operation.content is not None else None
-                    current = snapshot_operation(
-                        repository_root_fd,
-                        operation.operation,
-                        operation.path,
-                        operation.expected_sha256,
-                        proposed,
-                    )
+                    try:
+                        current = snapshot_operation(
+                            repository_root_fd,
+                            operation.operation,
+                            operation.path,
+                            operation.expected_sha256,
+                            proposed,
+                        )
+                    except PreparationError as exc:
+                        raise ProposalApplyServiceError(
+                            f"Target changed during interactive review: {operation.path}; no files were applied"
+                        ) from exc
                     if current != snapshot:
                         raise ProposalApplyServiceError(
                             f"Target changed during interactive review: {operation.path}; no files were applied"
