@@ -12,7 +12,7 @@ from workshop.proposal_apply.apply import ApplyError, apply_prepared_transaction
 from workshop.proposal_apply.filesystem import open_private_directory_at
 from workshop.proposal_apply.journal import read_journal
 from workshop.proposal_apply.locking import transaction_locks
-from workshop.proposal_apply.transaction import OperationRequest, prepare_proposal_transaction
+from workshop.proposal_apply.transaction import OperationRequest, prepare_proposal_transaction, snapshot_operation
 from workshop.proposals import ProposalStore
 
 
@@ -58,6 +58,13 @@ class ProposalApplyEngineTests(unittest.TestCase):
                              item.content.encode("utf-8") if item.content is not None else None)
             for item in self.operations
         )
+        self.snapshots = tuple(
+            snapshot_operation(
+                self.root_fd, item.operation, item.path, item.expected_sha256,
+                item.content.encode("utf-8") if item.content is not None else None,
+            )
+            for item in self.operations
+        )
         self.prepared = prepare_proposal_transaction(
             self.state_fd,
             self.proposal_fd,
@@ -78,6 +85,7 @@ class ProposalApplyEngineTests(unittest.TestCase):
                 proposal_sha256=self.record["record_sha256"],
                 repository_root_path=self.root,
                 operations=self.operations,
+                snapshots=self.snapshots,
             )
 
     def _journal(self):
@@ -110,6 +118,7 @@ class ProposalApplyEngineTests(unittest.TestCase):
                     proposal_sha256=self.record["record_sha256"],
                     repository_root_path=self.root,
                     operations=self.operations,
+                    snapshots=self.snapshots,
                 )
         self.assertEqual((self.root / "docs/note.txt").read_bytes(), b"updated note")
 
