@@ -180,7 +180,7 @@ def open_private_directory_at(parent_fd: int, name: str, *, create: bool = False
     if create:
         try:
             os.mkdir(name, 0o700, dir_fd=parent_fd)
-            os.fsync(parent_fd)
+            fsync_directory(parent_fd)
         except FileExistsError:
             pass
         except OSError as exc:
@@ -296,7 +296,7 @@ def replace_private_file_at(directory_fd: int, name: str, content: bytes) -> Non
         existing = None
     if existing is not None:
         if (not stat.S_ISREG(existing.st_mode) or existing.st_uid != os.getuid()
-                or existing.st_nlink != 1 or stat.S_IMODE(existing.st_mode) & 0o077):
+                or existing.st_nlink != 1 or stat.S_IMODE(existing.st_mode) != 0o600):
             raise FilesystemSafetyError(f"Refusing to replace unsafe private file: {name}")
 
     temporary = ".txn-" + secrets.token_hex(16) + ".tmp"
