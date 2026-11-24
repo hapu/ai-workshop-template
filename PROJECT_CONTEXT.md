@@ -1,27 +1,44 @@
-# Project Context
-
-Keep under 800 words. This file describes the master template, not a project created from it.
+# Project Context — SAT XML Manager
 
 ## Goal
-Provide a lightweight, provider-agnostic workshop for building software with AI assistants from an Android phone and a low-power Chromebook. Keep project state, context, decisions, and reviewable changes in Git while preserving human control over spending and file changes.
+Use SAT XML Manager as a real-world test of the AI workshop template. The app is intended to import, store, review, reconcile, and export Mexican SAT CFDI XML records, with an optional SAT mass-download connector using e.firma.
 
 ## Scope
-- **In:** Dependency-free Python task/checkpoint CLI; bounded context and handoffs; provider-neutral adapters; fail-closed free-tier policy and quota accounting; safe import and read-only review of browser-assistant file proposals; documented PR workflow.
-- **Out:** Enabled inference models by default, paid API usage without explicit approval, automatic proposal application, shell execution from assistant output, automatic provider/model fallback, heavy local model runtimes, and unattended Git publication.
+- **In:** Existing application assessment; CFDI XML/ZIP import; SQLite persistence; RFC profiles; CSV/JSON/Excel export; payment-complement reconciliation; SAT mass-download diagnosis; regression tests; security and operational review.
+- **Out for initial assessment:** Broad redesign, unrelated feature expansion, live SAT requests using real credentials, and changes to taxpayer records.
 
-## Constraints
-- **Devices:** Android phone and Chromebook with Intel Celeron N4500, 4 GB RAM, and approximately 15 GB Linux storage.
-- **Budget:** Free tiers only unless explicitly approved. Public claims of free access are not enough to enable a model.
-- **Stack / versions:** Python 3.10+ standard library; Bash for repository checks; GitHub Actions on Python 3.10–3.13.
-- **Licensing:** GPL-3.0.
-- **Other:** Keep the runtime light. Treat `.workshop/` as private and untracked. Never store credentials in the repository. Use feature branches and pull requests; never push directly to protected `main`.
+## Environment and reported stack
+- Target: Lenovo IdeaPad 3 Chromebook 15IJL6, Intel Celeron N4500, 4 GB RAM, approximately 15 GB Linux storage; Android phone for review.
+- Reported runtime: Python 3.13.5, x86_64 Linux.
+- Reported stack: Python Flask backend, HTML/CSS/JavaScript frontend, SQLite.
+- Reported local URL: `http://localhost:8765`.
+- The application source repository URL and exact current source revision are **unknown**. This workshop branch is a preparation/test harness, not verified application source.
 
-## Definition of done
-- **Testable outcome:** Unit tests, repository smoke tests, and documentation word budgets pass.
-- **User-visible behavior:** Task/context workflows are resumable; provider usage fails closed unless policy and fresh quota evidence pass; imported proposals produce only a safe, read-only preview.
-- **Checks that must pass:** `python3 -m unittest discover -s tests/unit -v`; `bash scripts/check-words.sh`; `bash tests/smoke.sh`; CI on Python 3.10, 3.11, 3.12, and 3.13.
+## Reported application capabilities — not yet verified
+- Multiple CFDI XML files and ZIP archives; common CFDI 3.3/4.0 fields and Retenciones.
+- UUID deduplication, text/type/date filters, CSV and JSON export.
+- SQLite persistence and multiple managed RFC profiles.
+- Excel export with six sheets: Comprobantes, Conceptos, Impuestos, Pagos, RFCs, Resumen mensual.
+- Separation of managed RFC profiles from discovered counterparties.
+- Payment complement reconciliation using ImpPagado and ImpSaldoInsoluto.
+- Multiple e.firma credentials associated with RFCs and an SAT mass-download/ZIP retrieval workflow. Credentials were reported as in-memory only; verify.
 
-## Current state
-- **What exists:** Task/checkpoint persistence, portable bundles, context builder, handoffs, provider policy and quota ledger, external quota reconciliation, OpenRouter adapter and diagnostics, and safe browser-assistant proposal intake/review with task/context provenance.
-- **What runs:** The local CLI and test suite. Provider adapters are gated; the tracked provider catalog is empty.
-- **What is missing:** Verified account-specific quota and billing evidence before enabling inference; multi-device quota reconciliation; a reviewed and explicitly approved proposal-apply design; manual fallback guidance for exhausted API quotas.
+## Current reported defects — reproduction required
+1. `POST /api/sat/requests` returns HTTP 502 in the local app path.
+2. SAT response: `CodEstatus=301`, message indicates an invalid `FechaFinal`.
+3. A separate browser 404 is reported; its URL and initiator are unknown.
+The explicit SAT rejection concerns `FechaFinal`. The source of the local 502 and the unrelated 404 are not established. A date-only `YYYY-MM-DD` value may be involved, but this remains a hypothesis until the frontend payload, Flask route, installed SAT client version, and sanitized SOAP serialization are inspected.
+
+## Domain and security constraints
+- CFDI primary identity: UUID.
+- Keep amounts separated by currency; do not aggregate currencies without a defined conversion policy.
+- Keep managed RFC profiles distinct from counterparties.
+- Reconciliation must account for partial payments and outstanding balances.
+- Never commit or transmit e.firma certificates, private keys, passwords, tokens, signatures, signed SOAP envelopes, or real taxpayer data. Use sanitized diagnostics and synthetic fixtures only unless the user explicitly approves otherwise.
+- Never claim a mass download is complete before ZIP retrieval and XML import are verified.
+
+## Definition of done for the first investigation
+- Identify the real source repository, branch, commit, and actual file tree.
+- Verify the current implementation and dependency versions rather than relying on historical feature claims.
+- Reproduce or precisely localize the FechaFinal rejection, local 502 mapping, and separate 404.
+- Produce a prioritized evidence-based gap analysis and test plan before implementation.
