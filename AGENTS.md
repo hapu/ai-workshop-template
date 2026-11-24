@@ -1,40 +1,38 @@
 # AGENTS.md
 
-Instructions for AI coding agents. Keep under 500 words.
+Instructions for AI agents working on the SAT XML Manager test project.
 
-## Environment & Commands
-- **Host:** low-power Chromebook; record its OS, RAM/CPU, and available storage.
-- **Stack:** Python 3.10+ standard library for the starter CLI; add dependencies only when justified.
-- **Run:** `python3 -m workshop --help` or `python3 -m workshop doctor`.
-- **Task state:** `python3 -m workshop task resume TASK_ID`.
-- **Context:** `python3 -m workshop context build --project . --output .workshop/context.md`.
-- **Provider safety:** `python3 -m workshop provider reconcile SNAPSHOT.json`, then `python3 -m workshop provider preflight PROVIDER MODEL --input-tokens N --output-tokens N --region REGION --account-scope PROJECT` and `python3 -m workshop provider usage PROVIDER MODEL --account-scope PROJECT`.
-- **Usage:** `python3 -m workshop provider usage PROVIDER MODEL --account-scope ACCOUNT_ALIAS`.
-- **Test:** `python3 -m unittest discover -s tests/unit -v` and `bash scripts/check-words.sh && bash tests/smoke.sh`.
+## Project and environment
+- **Purpose:** Local-first browser app for importing, storing, reviewing, reconciling, and exporting Mexican SAT CFDI XML records; optional SAT mass-download connector using e.firma.
+- **Target:** Lenovo IdeaPad 3 Chromebook 15IJL6, Intel Celeron N4500, 4 GB RAM, about 15 GB Linux storage; Android phone for review and coordination.
+- **Runtime reported:** Python 3.13.5; x86_64; Linux container.
+- **Reported stack:** Flask, HTML/CSS/JavaScript, SQLite; local URL `http://localhost:8765`.
+- **Expected entry points:** `app.py`, `cfdi.py`, `excel_export.py`, `reconciliation.py`, `static/app.js`, `templates/index.html`, `tests/`. These are hypotheses from a prior handoff; verify the actual project source before relying on them.
+- **Source repository:** Not yet identified. Do not assume the application lives in this template repository or invent a remote URL.
 
 ## Before changing anything
-1. Inspect the repo and working tree (`git status --short --branch`, `git log --oneline -5`).
-2. Read `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/WORKFLOW.md`, and `WORKSHOP.md`.
-3. Verify existing work; never assume a prior assistant's summary is correct.
-4. Verify provider, tool, and API facts from official docs if they may have changed.
-5. Explain the plan briefly before any multi-file or structural change.
+1. Inspect branch, status, recent commits, tracked files, and project instructions.
+2. Verify the application source repository and exact commit/version being tested.
+3. Read `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/ARCHITECTURE.md`, and `docs/WORKFLOW.md`.
+4. Reproduce and diagnose before patching. Distinguish confirmed facts from hypotheses.
+5. Explain the plan before multi-file or structural changes.
 
-## Rules
-- **Branching:** Never commit directly to `main`. Use short-lived `feature/<topic>` or `fix/<topic>` branches; review diffs before merging.
-- **Output discipline:** Keep terminal output small. Pipe verbose logs to `/tmp/` or tail the last 20 lines.
-- **Safety:** Never delete existing work, install dependencies, use paid APIs, or expose credentials without explicit approval.
-- **Provider policy:** Unknown, unverified, expired, non-zero-priced, disabled, region-ineligible, or over-limit models must be rejected. All adapters must use `execute_with_free_tier_gate`, which reserves quota before network I/O. OpenRouter chat uses `OPENROUTER_API_KEY`, exact model IDs, disabled provider fallbacks, and no retries. Never call raw adapters directly.
-- **Quota scope:** Use one non-secret `account_scope` alias for all credentials sharing the same provider account. Import a fresh snapshot for every policy quota window. Local usage does not include external apps/devices; reconcile provider dashboards before enabling calls. Never refund ambiguous requests.
-- **Scope:** Stay provider-agnostic. Do not invent quotas, capabilities, or compatibility claims.
-- **Editing boundaries:** Do not modify generated, vendored, or test files unless the task requires it.
-- **Docs:** Update docs when behavior or setup changes; do not leave stale paths or commands.
-- **Template maintenance:** Keep `PROJECT_CONTEXT.md` and `HANDOFF.md` generic for template users. Record template-level decisions and changes in `DECISIONS.md` and `DEVELOPMENT_LOG.md`.
+## Safety and domain rules
+- Never request, commit, log, or send e.firma certificates, private keys, passwords, tokens, signed SOAP envelopes, or taxpayer data to AI services.
+- Use sanitized payloads and diagnostics only. Do not put real CFDI records in fixtures without explicit approval.
+- Keep managed RFC profiles distinct from counterparties discovered in invoices.
+- Never sum different currencies without an explicit conversion policy.
+- Preserve partial-payment and remaining-balance semantics.
+- Do not claim a SAT download succeeded until ZIP retrieval and import actually complete.
+- Distinguish SAT business rejections from local validation, network failures, and unexpected internal errors.
+- Do not change production data or run destructive database operations without explicit approval.
 
-## When you finish, report
-- Files changed and why.
-- Checks/tests run and exact results.
-- Known limitations or decisions needed.
-- Branch, commit hash, and working-tree state.
-- Next recommended task.
+## Workflow
+- Use a dedicated feature/fix branch; never commit directly to `main`.
+- Keep changes narrow and assign one owner per code area.
+- Verify installed dependency versions and current SAT contracts before relying on API assumptions.
+- Add regression tests for date validation/serialization, error mapping, import, reconciliation, and security-sensitive behavior.
+- Run the project's documented checks once the actual source and commands are known. Do not invent test commands.
 
-Update `HANDOFF.md` with current state, verification commands, and next step. Do not claim a commit or push unless it actually happened.
+## Completion report
+Record changed files, exact checks and results, remaining risks, branch/commit, working-tree state, and next task. Update the handoff with verified facts only.
