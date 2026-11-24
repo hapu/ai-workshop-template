@@ -153,6 +153,7 @@ class ProposalApplyEngineTests(unittest.TestCase):
                     self.proposal_fd, self.root_fd, self.prepared.transaction_id,
                     proposal_id=self.staged.proposal_id,
                     proposal_sha256=self.record["record_sha256"],
+                    repository_root_path=self.root,
                     operations=self.operations,
                     snapshots=self.snapshots,
                 )
