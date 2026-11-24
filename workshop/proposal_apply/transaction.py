@@ -283,6 +283,16 @@ def prepare_transaction(
             raise PreparationError("Duplicate operation paths are not allowed")
         seen.add(item.path.casefold())
         record, backup, prepared = _operation_record(index, item)
+        sibling_prefix = f".workshop-txn-{transaction_id[:8]}-{index:04d}-{uuid.uuid4().hex[:12]}"
+        record.update({
+            "quarantine_name": None if item.operation == "create" else sibling_prefix + ".quarantine",
+            "temporary_name": sibling_prefix + ".tmp",
+            "status": "PENDING",
+            "applied_device": None,
+            "applied_inode": None,
+            "quarantine_device": None,
+            "quarantine_inode": None,
+        })
         records.append(record)
         payloads.append((backup, prepared))
 
@@ -294,7 +304,7 @@ def prepare_transaction(
     try:
         journal: dict[str, object] = {
             "format": "ai-workshop-proposal-transaction",
-            "version": 1,
+            "version": 2,
             "transaction_id": transaction_id,
             "proposal_id": proposal_id,
             "proposal_sha256": proposal_sha256,
