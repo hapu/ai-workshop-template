@@ -3,10 +3,10 @@
 Prioritized template-maintenance backlog. Keep exactly one active task under **Now**. A checked item belongs in **Completed**, not in an active queue.
 
 ## Now
-- [ ] Implement stage 3 of proposal application: interactive digest-bound approval, per-file no-overwrite application, verification, journaled rollback, and explicit recovery confirmation. Keep adversarial/crash tests as a separate stage.
+- [ ] Complete stage-4 crash-injection and adversarial recovery tests for draft PR #25; rerun CI on the exact head before review or merge.
 
 ## Next
-- [ ] Add crash-injection and adversarial race tests for every journal transition, target operation, and rollback step.
+- [ ] Review and accept PR #25 only after every stage-4 acceptance test passes on Python 3.10–3.13.
 - [ ] Add manual fallback instructions for when browser/API quotas are exhausted.
 - [ ] Add provider-specific quota refresh for remaining dimensions only where safe official APIs expose them.
 - [ ] Verify actual OpenRouter account/project quotas, external usage, region, model eligibility, and billing safeguards before adding any enabled model policy.
@@ -30,9 +30,10 @@ Prioritized template-maintenance backlog. Keep exactly one active task under **N
 - [x] Provider-neutral contract, empty-by-default model catalog, fail-closed policy, SQLite quota ledger, and atomic reservations.
 - [x] External quota snapshot reconciliation, OpenRouter key-status refresh, Groq header reconciliation, and sanitized OpenRouter rate-limit diagnostics.
 - [x] OpenRouter adapter behind the shared quota gate, with exact model pinning, no retries, and no provider fallback.
-- [x] Safe proposal intake: bounded versioned bundles, path/protected-file checks, expected hashes, private staging, integrity checks, stale-preview rejection, and terminal-safe read-only diffs.
+- [x] Safe proposal intake: bounded versioned bundles, path/protected-file checks, expected hashes, private staging, integrity checks, stale-preview rejection, and recomputed terminal-safe diffs.
 - [x] Optional task ID and context-bundle SHA-256 provenance for proposals.
 - [x] Approve the proposal-application safety design with POSIX, rollback, existing-parent-only, and interactive-approval decisions.
-- [x] Stage 1 POSIX filesystem primitives and advisory locks; merged by PR #23.
-- [x] Stage 2 canonical journal, durable private backup/prepared payloads, lock-held snapshots, and read-only recovery inventory; merged by PR #24.
+- [x] Stage 1 POSIX filesystem primitives and advisory locks; merged by PR #23 into the design branch.
+- [x] Stage 2 canonical journal, durable private backup/prepared payloads, lock-held snapshots, and read-only recovery inventory; merged by PR #24 into the design branch.
+- [ ] Stage 3 interactive approval, no-overwrite application, rollback, and explicit recovery; implemented in draft PR #25, pending stage-4 validation and review.
 - [x] Protected main branch, required Python 3.10–3.13 CI, and squash-only PR workflow.
