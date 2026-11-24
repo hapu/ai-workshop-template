@@ -47,11 +47,11 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [x] Preserve optional workshop task ID and exact context-bundle SHA-256 in proposal metadata without copying context contents.
 - [ ] Add manual fallback instructions when API quotas are exhausted.
 
-## Proposal apply safety gate (not implemented)
+## Proposal apply safety gate (staged implementation)
 
 The proposed design is documented in [docs/PROPOSAL_APPLICATION_DESIGN.md](PROPOSAL_APPLICATION_DESIGN.md). Selected decisions: POSIX-first with fail-closed capability checks; rollback as the default interrupted-transaction recovery; existing parent directories only; and interactive confirmation bound to the full staged-record SHA-256 digest.
 
-The design was approved on 2026-11-23. Implementation proceeds through separate review gates. Stage 1 is in draft [PR #23](https://github.com/hapu/ai-workshop-template/pull/23): POSIX capability checks, descriptor-relative no-follow traversal, read-only regular-file inspection, and advisory-lock infrastructure with tests. Stage 1 does not write repository targets. Next, after review, add the durable journal, backup preparation, and recovery inventory without target writes. Only a later approved gate may add interactive digest-bound application and rollback. Git commits, pushes, PRs, and merges remain separate approvals. No apply or recovery command exists today.
+The design was approved on 2026-11-23. Stage 1 (POSIX filesystem primitives and advisory locks) was squash-merged by PR #23 into the design branch; `main` remains unchanged. Stage 2 is under review in draft [PR #24](https://github.com/hapu/ai-workshop-template/pull/24): canonical journals, private backups/prepared files, descriptor-relative target snapshots, and read-only recovery inventory. Stage 2 does not modify repository targets. Stage 3 will add interactive digest-bound approval, application, and rollback only after stage 2 is accepted. Git commits, pushes, PRs, and merges remain separate approvals. No apply or recovery command exists today.
 
 ## Phase 5: Controlled development automation
 - [ ] Add opt-in project checks and isolated execution.
