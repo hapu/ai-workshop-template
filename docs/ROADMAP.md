@@ -43,12 +43,15 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [x] Store proposals privately under ignored `.workshop/proposals/` state with source, timestamp, and bundle-hash provenance.
 - [x] Generate read-only diffs, checksum staged records, escape terminal control characters, and reject stale/conflicting previews.
 - [x] Keep command execution and file application out of import/preview; no proposal content is executed or automatically applied.
-- [ ] Design a separately approved file-application transaction with immediate hash rechecks, symlink/race protections, and recoverable multi-file behavior. Do not implement until reviewed.
+- [x] Review and approve the finalized [proposal-application safety design](PROPOSAL_APPLICATION_DESIGN.md) before implementation.
 - [x] Preserve optional workshop task ID and exact context-bundle SHA-256 in proposal metadata without copying context contents.
 - [ ] Add manual fallback instructions when API quotas are exhausted.
 
-## Proposal apply safety gate (not implemented)
-A future apply operation must be a separate local CLI action, never part of import or preview. It must require the user to identify the exact staged proposal and explicitly approve its reviewed digest; revalidate the staged-record checksum, every path, and every expected file hash immediately before writes; reject symlinks and protected paths again; avoid shell execution and provider calls; and define safe recovery for interrupted multi-file updates. Git commits, pushes, PRs, and merges remain separate approvals. No apply command exists today.
+## Proposal apply safety gate (staged implementation)
+
+The proposed design is documented in [docs/PROPOSAL_APPLICATION_DESIGN.md](PROPOSAL_APPLICATION_DESIGN.md). Selected decisions: POSIX-first with fail-closed capability checks; rollback as the default interrupted-transaction recovery; existing parent directories only; and interactive confirmation bound to the full staged-record SHA-256 digest.
+
+The design was approved on 2026-11-23. Stage 1 (POSIX filesystem primitives and advisory locks) was squash-merged by PR #23 into the design branch; `main` remains unchanged. Stage 2 (canonical journals, private backups/prepared files, lock-held snapshots, and read-only recovery inventory) was squash-merged by PR #24; CI passed on Python 3.10–3.13. Stage 3 is implemented in draft [PR #25](https://github.com/hapu/ai-workshop-template/pull/25): interactive digest-bound approval, recomputed live diffs, journaled no-overwrite application, rollback, and explicit recovery/cleanup commands. It is not merged. Stage 4 crash-injection and adversarial race/recovery testing is the active gate; do not merge stage 3 until those tests pass on Python 3.10–3.13. Git commits, pushes, PRs, and merges remain separate approvals. `main` still has no apply or recovery command.
 
 ## Phase 5: Controlled development automation
 - [ ] Add opt-in project checks and isolated execution.

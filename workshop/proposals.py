@@ -17,8 +17,17 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from .proposal_apply.filesystem import (
+    _verify_private_directory,
+    directory_identity,
+    open_private_directory_at,
+    open_repository_root,
+    read_private_file_at,
+)
+
 _FORMAT = "ai-workshop-file-proposal"
-_VERSION = 1
+_BUNDLE_VERSION = 1
+_STAGED_RECORD_VERSION = 2
 _MAX_BUNDLE_BYTES = 256 * 1024
 _MAX_OPERATIONS = 32
 _MAX_FILE_BYTES = 64 * 1024
@@ -51,6 +60,18 @@ class StagedProposal:
     proposal_id: str
     directory: Path
     operations: tuple[ProposalOperation, ...]
+
+
+def _render_diff(operation: ProposalOperation, old_text: str, exists: bool) -> str:
+    new_text = operation.content or ""
+    if operation.operation == "delete":
+        new_text = ""
+    return "".join(difflib.unified_diff(
+        old_text.splitlines(keepends=True),
+        new_text.splitlines(keepends=True),
+        fromfile=f"a/{operation.path}" if exists else "/dev/null",
+        tofile=f"b/{operation.path}" if operation.operation != "delete" else "/dev/null",
+    ))
 
 
 def _canonical_json(value: Any) -> bytes:
@@ -128,7 +149,7 @@ def parse_proposal(raw: bytes | str) -> tuple[dict[str, Any], tuple[ProposalOper
     if (not isinstance(payload, dict) or not required.issubset(payload)
             or set(payload) - required - optional):
         raise ProposalError("Proposal is missing required fields or contains unsupported fields")
-    if payload["format"] != _FORMAT or type(payload["version"]) is not int or payload["version"] != _VERSION:
+    if payload["format"] != _FORMAT or type(payload["version"]) is not int or payload["version"] != _BUNDLE_VERSION:
         raise ProposalError("Unsupported proposal format or version")
     for field in ("source", "created_at"):
         value = payload[field]
@@ -198,6 +219,12 @@ def _atomic_private_write(path: Path, content: bytes) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temp_name, path)
+        if os.name == "posix" and hasattr(os, "O_DIRECTORY"):
+            directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
     except OSError:
         try:
             os.unlink(temp_name)
@@ -246,46 +273,160 @@ class ProposalStore:
                     old = current.decode("utf-8")
                 except UnicodeError as exc:
                     raise ProposalError(f"Existing target is not UTF-8 text: {operation.path}") from exc
-            new = operation.content or ""
-            if operation.operation == "delete":
-                new = ""
-            diff = "".join(difflib.unified_diff(
-                old.splitlines(keepends=True),
-                new.splitlines(keepends=True),
-                fromfile=f"a/{operation.path}" if exists else "/dev/null",
-                tofile=f"b/{operation.path}" if operation.operation != "delete" else "/dev/null",
-            ))
+            diff = _render_diff(operation, old, exists)
             previews.append({"path": operation.path, "operation": operation.operation, "diff": diff})
 
+        self.home.mkdir(parents=True, exist_ok=True)
         self.proposals_dir.mkdir(parents=True, exist_ok=True)
-        if self.proposals_dir.is_symlink():
-            raise ProposalError("Proposal staging directory must not be a symlink")
+        if self.home.is_symlink() or self.proposals_dir.is_symlink():
+            raise ProposalError("Private proposal state must not contain symlink directories")
         try:
+            os.chmod(self.home, 0o700)
             os.chmod(self.proposals_dir, 0o700)
         except OSError as exc:
             raise ProposalError("Cannot secure the private proposal staging directory") from exc
+        root_info = self.repository.stat()
+        repository_identity = {
+            "root": str(self.repository),
+            "device": root_info.st_dev,
+            "inode": root_info.st_ino,
+        }
         proposal_id = uuid.uuid4().hex
+        normalized_operations = [
+            {"op": op.operation, "path": op.path, "expected_sha256": op.expected_sha256,
+             "content": op.content}
+            for op in operations
+        ]
+        normalized_bundle = {
+            "format": _FORMAT,
+            "version": _BUNDLE_VERSION,
+            "source": payload["source"],
+            "created_at": payload["created_at"],
+            "operations": normalized_operations,
+        }
+        if payload.get("task_id") is not None:
+            normalized_bundle["task_id"] = payload["task_id"]
+        if payload.get("context_sha256") is not None:
+            normalized_bundle["context_sha256"] = payload["context_sha256"]
         record = {
             "format": _FORMAT,
-            "version": _VERSION,
+            "version": _STAGED_RECORD_VERSION,
+            "repository_identity": repository_identity,
             "proposal_id": proposal_id,
             "source": payload["source"],
             "created_at": payload["created_at"],
             "task_id": payload.get("task_id"),
             "context_sha256": payload.get("context_sha256"),
-            "bundle_sha256": _sha256(_canonical_json(payload)),
-            "operations": [
-                {"op": op.operation, "path": op.path, "expected_sha256": op.expected_sha256,
-                 "content": op.content}
-                for op in operations
-            ],
+            "bundle_sha256": _sha256(_canonical_json(normalized_bundle)),
+            "operations": normalized_operations,
             "previews": previews,
             "status": "staged_read_only",
         }
         record["record_sha256"] = _record_digest(record)
         directory = self.proposals_dir / proposal_id
+        try:
+            directory.mkdir(mode=0o700)
+            os.chmod(directory, 0o700)
+        except OSError as exc:
+            raise ProposalError("Cannot create a unique private proposal directory") from exc
         _atomic_private_write(directory / "proposal.json", _canonical_json(record))
         return StagedProposal(proposal_id, directory, operations)
+
+    def open_for_apply(
+        self, proposal_id: str
+    ) -> tuple[int, int, int, dict[str, Any], tuple[ProposalOperation, ...]]:
+        """Open and validate a v2 staged proposal through private descriptors.
+
+        The caller owns and must close the returned state, proposal, and root
+        descriptors. The proposal lock must be acquired before relying on the
+        returned record for an apply operation.
+        """
+        if not isinstance(proposal_id, str) or not _ID.fullmatch(proposal_id):
+            raise ProposalError("Invalid proposal ID")
+        state_fd = proposal_fd = root_fd = proposals_fd = None
+        try:
+            state_fd = open_repository_root(self.home)
+            _verify_private_directory(state_fd)
+            proposals_fd = open_private_directory_at(state_fd, "proposals")
+            proposal_fd = open_private_directory_at(proposals_fd, proposal_id)
+            root_fd = open_repository_root(self.repository)
+            os.close(proposals_fd)
+            proposals_fd = None
+
+            raw = read_private_file_at(proposal_fd, "proposal.json", max_bytes=_MAX_BUNDLE_BYTES)
+            try:
+                record = json.loads(raw.decode("utf-8"))
+            except (UnicodeError, json.JSONDecodeError) as exc:
+                raise ProposalError("Staged proposal record is not valid UTF-8 JSON") from exc
+            expected_fields = {
+                "format", "version", "repository_identity", "proposal_id", "source",
+                "created_at", "task_id", "context_sha256", "bundle_sha256",
+                "operations", "previews", "status", "record_sha256",
+            }
+            legacy_fields = expected_fields - {"repository_identity"}
+            if not isinstance(record, dict) or record.get("format") != _FORMAT:
+                raise ProposalError("Staged proposal record fields are malformed")
+            if type(record.get("version")) is not int:
+                raise ProposalError("Staged proposal format is invalid")
+            if record["version"] == 1:
+                if set(record) != legacy_fields:
+                    raise ProposalError("Legacy staged proposal record fields are malformed")
+                raise ProposalError("This staged proposal predates repository identity binding; restage it")
+            if record["version"] != _STAGED_RECORD_VERSION or set(record) != expected_fields:
+                raise ProposalError("Staged proposal record fields are malformed")
+            if record.get("proposal_id") != proposal_id or record.get("status") != "staged_read_only":
+                raise ProposalError("Staged proposal identity or status is invalid")
+            supplied_digest = record.get("record_sha256")
+            if not isinstance(supplied_digest, str) or not hmac.compare_digest(
+                supplied_digest, _record_digest(record)
+            ):
+                raise ProposalError("Staged proposal integrity check failed; do not apply it")
+
+            identity = record.get("repository_identity")
+            root_identity = directory_identity(root_fd)
+            if (not isinstance(identity, dict) or set(identity) != {"root", "device", "inode"}
+                    or identity.get("root") != str(self.repository)
+                    or type(identity.get("device")) is not int
+                    or type(identity.get("inode")) is not int
+                    or identity["device"] != root_identity.device
+                    or identity["inode"] != root_identity.inode):
+                raise ProposalError("Repository identity changed since staging; restage the proposal")
+
+            bundle_payload = {
+                "format": _FORMAT,
+                "version": _BUNDLE_VERSION,
+                "source": record.get("source"),
+                "created_at": record.get("created_at"),
+                "operations": record.get("operations"),
+            }
+            if record.get("task_id") is not None:
+                bundle_payload["task_id"] = record["task_id"]
+            if record.get("context_sha256") is not None:
+                bundle_payload["context_sha256"] = record["context_sha256"]
+            if (not isinstance(record.get("bundle_sha256"), str)
+                    or not hmac.compare_digest(
+                        record["bundle_sha256"], _sha256(_canonical_json(bundle_payload))
+                    )):
+                raise ProposalError("Staged bundle provenance digest is invalid")
+            _, operations = parse_proposal(_canonical_json(bundle_payload))
+            previews = record.get("previews")
+            if not isinstance(previews, list) or len(previews) != len(operations):
+                raise ProposalError("Staged preview does not match its operations")
+            for operation, preview in zip(operations, previews):
+                if (not isinstance(preview, dict) or set(preview) != {"path", "operation", "diff"}
+                        or preview.get("path") != operation.path
+                        or preview.get("operation") != operation.operation
+                        or not isinstance(preview.get("diff"), str)):
+                    raise ProposalError("Staged preview metadata is malformed")
+            return state_fd, proposal_fd, root_fd, record, operations
+        except BaseException:
+            for descriptor in (proposals_fd, proposal_fd, root_fd, state_fd):
+                if descriptor is not None:
+                    try:
+                        os.close(descriptor)
+                    except OSError:
+                        pass
+            raise
 
     def preview(self, proposal_id: str) -> str:
         if not isinstance(proposal_id, str) or not _ID.fullmatch(proposal_id):
@@ -300,8 +441,21 @@ class ProposalStore:
             raise ProposalError("Staged proposal not found or unreadable") from exc
         if not isinstance(record, dict) or record.get("format") != _FORMAT:
             raise ProposalError("Staged proposal format is invalid")
-        if type(record.get("version")) is not int or record["version"] != _VERSION:
+        if type(record.get("version")) is not int or record["version"] not in {1, _STAGED_RECORD_VERSION}:
             raise ProposalError("Staged proposal version is invalid")
+        if record["version"] == _STAGED_RECORD_VERSION:
+            identity = record.get("repository_identity")
+            try:
+                root_info = self.repository.stat()
+            except OSError as exc:
+                raise ProposalError("Repository root cannot be revalidated") from exc
+            if (not isinstance(identity, dict) or set(identity) != {"root", "device", "inode"}
+                    or identity.get("root") != str(self.repository)
+                    or type(identity.get("device")) is not int
+                    or type(identity.get("inode")) is not int
+                    or identity["device"] != root_info.st_dev
+                    or identity["inode"] != root_info.st_ino):
+                raise ProposalError("Staged proposal belongs to a different repository identity; restage it")
         if record.get("proposal_id") != proposal_id:
             raise ProposalError("Staged proposal identity does not match its directory")
         supplied_digest = record.get("record_sha256")
@@ -314,38 +468,57 @@ class ProposalStore:
         previews = record.get("previews")
         if not isinstance(operations, list) or not isinstance(previews, list):
             raise ProposalError("Staged proposal contents are malformed")
-        _, validated_operations = parse_proposal(_canonical_json({
+        bundle_payload = {
             "format": _FORMAT,
-            "version": _VERSION,
+            "version": _BUNDLE_VERSION,
             "source": record.get("source"),
             "created_at": record.get("created_at"),
             **({"task_id": record["task_id"]} if record.get("task_id") is not None else {}),
             **({"context_sha256": record["context_sha256"]} if record.get("context_sha256") is not None else {}),
             "operations": operations,
-        }))
+        }
+        if record["version"] == _STAGED_RECORD_VERSION:
+            bundle_digest = record.get("bundle_sha256")
+            if (not isinstance(bundle_digest, str)
+                    or not hmac.compare_digest(bundle_digest, _sha256(_canonical_json(bundle_payload)))):
+                raise ProposalError("Staged bundle provenance digest is invalid")
+        _, validated_operations = parse_proposal(_canonical_json(bundle_payload))
         if len(previews) != len(validated_operations):
             raise ProposalError("Staged proposal preview count does not match its operations")
 
         stale: list[str] = []
+        rendered_previews: list[dict[str, str]] = []
         for operation, item in zip(validated_operations, previews):
             if (not isinstance(item, dict) or item.get("operation") != operation.operation
                     or item.get("path") != operation.path or not isinstance(item.get("diff"), str)):
                 raise ProposalError("Staged proposal preview does not match its operation")
             _, target = _safe_path(self.repository, operation.path)
             exists = target.exists()
+            old_text = ""
             if operation.operation == "create":
                 if exists:
                     stale.append(f"{operation.path}: target now exists")
             elif not exists or not target.is_file():
                 stale.append(f"{operation.path}: expected file is now missing")
+                continue
             else:
                 try:
                     if target.stat().st_size > _MAX_FILE_BYTES:
                         stale.append(f"{operation.path}: current file exceeds the review size limit")
-                    elif _sha256(target.read_bytes()) != operation.expected_sha256:
+                        continue
+                    current = target.read_bytes()
+                    if _sha256(current) != operation.expected_sha256:
                         stale.append(f"{operation.path}: file changed after staging")
-                except OSError as exc:
+                        continue
+                    old_text = current.decode("utf-8")
+                except (OSError, UnicodeError) as exc:
                     stale.append(f"{operation.path}: cannot verify current file ({exc})")
+                    continue
+            rendered_previews.append({
+                "path": operation.path,
+                "operation": operation.operation,
+                "diff": _render_diff(operation, old_text, exists),
+            })
         if stale:
             details = "; ".join(stale)
             raise ProposalError(f"Staged proposal is stale; discard and restage it: {details}")
@@ -360,7 +533,7 @@ class ProposalStore:
             "Status: staged_read_only (repository files were not changed)",
             "Freshness: current repository files still match the staged preconditions",
         ]
-        for item in previews:
+        for item in rendered_previews:
             if not isinstance(item, dict) or not all(
                 isinstance(item.get(key), str) for key in ("operation", "path", "diff")
             ):
