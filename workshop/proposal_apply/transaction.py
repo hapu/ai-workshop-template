@@ -22,6 +22,7 @@ from .filesystem import (
     open_regular_file_at,
 )
 from .journal import write_journal
+from .locking import transaction_locks
 
 _MAX_FILE_BYTES = 64 * 1024
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -42,6 +43,14 @@ class PreparedOperation:
     original_mode: int | None = None
     original_device: int | None = None
     original_inode: int | None = None
+
+
+@dataclass(frozen=True)
+class OperationRequest:
+    operation: str
+    path: str
+    expected_sha256: str | None
+    proposed_content: bytes | None
 
 
 @dataclass(frozen=True)
@@ -317,3 +326,51 @@ def prepare_transaction(
             os.close(prepared_fd)
     finally:
         os.close(transaction_fd)
+
+
+def prepare_proposal_transaction(
+    state_dir_fd: int,
+    proposal_dir_fd: int,
+    *,
+    repository_path: str | os.PathLike[str],
+    repository_root_fd: int,
+    proposal_id: str,
+    proposal_sha256: str,
+    operations: Sequence[OperationRequest],
+    timeout: float = 10.0,
+    transaction_id: str | None = None,
+) -> PreparedTransaction:
+    """Acquire both locks, snapshot current targets, and prepare private state.
+
+    The proposal lock is acquired before the repository-wide lock. Both remain
+    held until every backup/prepared file and the PREPARED journal are durable.
+    Repository target files are opened read-only and are never modified.
+    """
+    if not isinstance(proposal_id, str) or not re.fullmatch(r"[0-9a-f]{32}", proposal_id):
+        raise PreparationError("Invalid proposal ID")
+    if not 1 <= len(operations) <= 32:
+        raise PreparationError("Transaction must contain 1 to 32 operations")
+    snapshots: list[PreparedOperation] = []
+    with transaction_locks(
+        state_dir_fd, f"proposal-{proposal_id}.lock", timeout=timeout
+    ):
+        identity = repository_identity(repository_path, repository_root_fd)
+        for request in operations:
+            if not isinstance(request, OperationRequest):
+                raise PreparationError("Operations must be validated OperationRequest values")
+            snapshots.append(snapshot_operation(
+                repository_root_fd,
+                request.operation,
+                request.path,
+                request.expected_sha256,
+                request.proposed_content,
+            ))
+        return prepare_transaction(
+            proposal_dir_fd,
+            proposal_id=proposal_id,
+            proposal_sha256=proposal_sha256,
+            repository=identity,
+            repository_root_fd=repository_root_fd,
+            operations=snapshots,
+            transaction_id=transaction_id,
+        )
