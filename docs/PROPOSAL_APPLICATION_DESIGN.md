@@ -1,6 +1,6 @@
 # Proposal Application Safety Design
 
-**Status:** Approved; implementation in staged review  
+**Status:** Approved; stages 1 and 2 merged, stage 3 in progress  
 **Decision date:** 2026-11-23  
 **Scope:** Local application of staged browser-assistant file proposals  
 **Selected platform:** POSIX  
