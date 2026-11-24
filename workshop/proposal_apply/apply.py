@@ -125,7 +125,7 @@ def _cleanup_quarantine(
         if entry is None:
             return None
         data, info = entry
-        if (_sha256(data) != operation["original_sha256"]
+        if (_sha256(data) != operation["original_sha256"] or info.st_nlink != 1
                 or not _same_identity(info, operation.get("quarantine_device"), operation.get("quarantine_inode"))):
             return f"Refused to remove unexpected quarantine entry: {name}"
         unlink_file_at(parent_fd, name)
@@ -265,9 +265,9 @@ def rollback_transaction(
                         continue
                     if original_is_same:
                         if quarantine is not None:
-                            if (quarantine_info.st_dev, quarantine_info.st_ino) != (
+                            if ((quarantine_info.st_dev, quarantine_info.st_ino) != (
                                 target_info.st_dev, target_info.st_ino
-                            ):
+                            ) or quarantine_info.st_nlink != 2 or target_info.st_nlink != 2):
                                 raise ApplyError(f"Unexpected quarantine identity: {quarantine_name}")
                             unlink_file_at(parent_fd, quarantine_name)
                         if temporary is not None:
@@ -307,6 +307,7 @@ def rollback_transaction(
                             _sha256(restored[0]) != original_digest
                             or restored[1].st_dev != quarantine_info.st_dev
                             or restored[1].st_ino != quarantine_info.st_ino
+                            or restored[1].st_nlink != 2
                         ):
                             raise ApplyError(f"Could not verify quarantine restoration: {operation['path']}")
                         unlink_file_at(parent_fd, quarantine_name)
@@ -351,7 +352,7 @@ def rollback_transaction(
                                 or _sha256(restored[0]) != original_digest
                                 or (restored[1].st_dev, restored[1].st_ino) != (
                                     temp_now[1].st_dev, temp_now[1].st_ino
-                                )):
+                                ) or restored[1].st_nlink != 2 or temp_now[1].st_nlink != 2):
                             raise ApplyError(f"Could not verify backup restoration: {operation['path']}")
                         operation["applied_device"] = restored[1].st_dev
                         operation["applied_inode"] = restored[1].st_ino
@@ -562,7 +563,7 @@ def apply_prepared_transaction(
                             )
                             if (_sha256(target_data) != operation["original_sha256"]
                                     or target_info.st_dev != operation["original_device"]
-                                    or target_info.st_ino != operation["original_inode"]):
+                                    or target_info.st_ino != operation["original_inode"] or target_info.st_nlink != 2):
                                 raise ApplyError(f"Target changed before quarantine removal: {operation['path']}")
                             unlink_file_at(parent_fd, target_name)
                             operation["status"] = "TARGET_REMOVED"
@@ -580,7 +581,8 @@ def apply_prepared_transaction(
                                     or (target_info.st_dev, target_info.st_ino) != (
                                         temporary_info.st_dev, temporary_info.st_ino
                                     )
-                                    or _sha256(temporary_data) != operation["proposed_sha256"]):
+                                    or _sha256(temporary_data) != operation["proposed_sha256"]
+                                    or target_info.st_nlink != 2 or temporary_info.st_nlink != 2):
                                 raise ApplyError(f"Installed target verification failed: {operation['path']}")
                             operation["applied_device"] = target_info.st_dev
                             operation["applied_inode"] = target_info.st_ino
