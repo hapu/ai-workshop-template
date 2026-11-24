@@ -15,6 +15,39 @@ class ApprovalError(ValueError):
     """Raised when interactive proposal approval is missing or invalid."""
 
 
+
+def confirm_recovery_action(
+    action: str,
+    transaction_id: str,
+    journal_sha256: str,
+    *,
+    input_stream: TextIO,
+    output_stream: TextIO,
+) -> None:
+    """Require an exact journal-digest-bound terminal recovery confirmation."""
+    if action not in {"ROLLBACK", "CLEANUP"}:
+        raise ApprovalError("Unsupported recovery action")
+    if not isinstance(transaction_id, str) or not re.fullmatch(r"^[0-9a-f]{32}$", transaction_id):
+        raise ApprovalError("Invalid transaction ID")
+    if not isinstance(journal_sha256, str) or not _SHA256.fullmatch(journal_sha256):
+        raise ApprovalError("Invalid transaction journal digest")
+    if not input_stream.isatty() or not output_stream.isatty():
+        raise ApprovalError("Transaction recovery requires an interactive terminal; no files were changed")
+    expected = f"{action} {transaction_id} {journal_sha256}"
+    output_stream.write(f"Transaction recovery action: {action}\n")
+    output_stream.write(f"Transaction ID: {transaction_id}\n")
+    output_stream.write(f"Journal SHA-256: {journal_sha256}\n")
+    output_stream.write("This action changes transaction state or removes transaction artifacts.\n")
+    output_stream.write(f"Type the exact line below to continue:\n{expected}\n> ")
+    output_stream.flush()
+    line = input_stream.readline()
+    if line.endswith("\n"):
+        line = line[:-1]
+    if line.endswith("\r"):
+        line = line[:-1]
+    if not hmac.compare_digest(line, expected):
+        raise ApprovalError("Recovery confirmation did not match exactly; no files were changed")
+
 def verify_approval_digest(expected_sha256: str, supplied_sha256: str) -> None:
     """Require the complete lowercase staged-record digest."""
     if not isinstance(expected_sha256, str) or not _SHA256.fullmatch(expected_sha256):
