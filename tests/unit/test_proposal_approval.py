@@ -50,8 +50,8 @@ class ProposalApprovalTests(unittest.TestCase):
         )
         rendered = output.getvalue()
         self.assertIn(self.digest, rendered)
-        self.assertIn("UPDATE  README.md", rendered)
-        self.assertIn("CREATE  docs/new.md", rendered)
+        self.assertIn("UPDATE README.md", rendered)
+        self.assertIn("CREATE docs/new.md", rendered)
 
     def test_confirmation_with_extra_space_or_wrong_id_is_rejected(self) -> None:
         for supplied in (
