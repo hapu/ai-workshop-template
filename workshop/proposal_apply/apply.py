@@ -250,7 +250,7 @@ def rollback_transaction(
                         )
                     ) or (
                         _sha256(target_data) == original_digest
-                        and operation.get("status") == "RESTORED"
+                        and operation.get("status") in {"RESTORED", "DONE"}
                         and _same_identity(
                             target_info, operation.get("applied_device"), operation.get("applied_inode")
                         )
