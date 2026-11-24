@@ -630,7 +630,11 @@ def apply_prepared_transaction(
                     try:
                         rollback_transaction(transaction_fd, repository_root_fd, repository_root_path=repository_root_path)
                     except BaseException as rollback_exc:
-                        _mark_needs_recovery(transaction_fd, current)
+                        try:
+                            latest = read_journal(transaction_fd)
+                        except BaseException:
+                            latest = current
+                        _mark_needs_recovery(transaction_fd, latest)
                         raise ApplyError(
                             f"Application failed and rollback needs recovery: {rollback_exc}"
                         ) from exc
