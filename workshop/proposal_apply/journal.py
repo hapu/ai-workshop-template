@@ -177,6 +177,39 @@ def validate_journal(value: object) -> dict[str, Any]:
             if backup != f"{expected_index:04d}.bin" or type(backup_size) is not int or backup_size != operation["original_size"]:
                 raise JournalError("Delete operation backup metadata is invalid")
 
+        if value["version"] == 2:
+            quarantine_name = operation.get("quarantine_name")
+            temporary_name = operation.get("temporary_name")
+            status = operation.get("status")
+            if not isinstance(status, str) or status not in _PROGRESS_STATES:
+                raise JournalError("Journal operation progress state is invalid")
+            prefix = ".workshop-txn-" + value["transaction_id"][:8] + f"-{expected_index:04d}-"
+            invalid_chars = lambda name: "/" in name or chr(92) in name or chr(0) in name
+            if (not isinstance(temporary_name, str) or not temporary_name.startswith(prefix)
+                    or not temporary_name.endswith(".tmp") or invalid_chars(temporary_name)):
+                raise JournalError("Journal temporary sibling filename is invalid")
+            if op == "create":
+                if quarantine_name is not None:
+                    raise JournalError("Create operation cannot have a quarantine filename")
+            elif (not isinstance(quarantine_name, str) or not quarantine_name.startswith(prefix)
+                    or not quarantine_name.endswith(".quarantine") or invalid_chars(quarantine_name)):
+                raise JournalError("Journal quarantine sibling filename is invalid")
+            if temporary_name == quarantine_name:
+                raise JournalError("Journal sibling filenames must be distinct")
+            applied_device = operation.get("applied_device")
+            applied_inode = operation.get("applied_inode")
+            quarantine_device = operation.get("quarantine_device")
+            quarantine_inode = operation.get("quarantine_inode")
+            if (not _is_optional_nonnegative_int(applied_device)
+                    or not _is_optional_nonnegative_int(applied_inode)
+                    or (applied_device is None) != (applied_inode is None)):
+                raise JournalError("Applied target identity is invalid")
+            if (not _is_optional_nonnegative_int(quarantine_device)
+                    or not _is_optional_nonnegative_int(quarantine_inode)
+                    or (quarantine_device is None) != (quarantine_inode is None)):
+                raise JournalError("Quarantine identity is invalid")
+            if op == "create" and (quarantine_device is not None or quarantine_inode is not None):
+                raise JournalError("Create operation cannot have a quarantine identity")
     if not _is_sha(value.get("journal_sha256")):
         raise JournalError("Journal integrity digest is missing or malformed")
     return value
