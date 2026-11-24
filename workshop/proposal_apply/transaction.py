@@ -17,6 +17,7 @@ from .filesystem import (
     directory_identity,
     fsync_directory,
     open_existing_parent,
+    open_repository_root,
     open_private_directory_at,
     open_regular_file_at,
 )
@@ -76,6 +77,13 @@ def repository_identity(root_path: str | os.PathLike[str], root_fd: int) -> dict
     """Capture the canonical root path and the identity of its open descriptor."""
     absolute = os.path.abspath(os.fspath(root_path))
     identity = directory_identity(root_fd)
+    verified_fd = open_repository_root(absolute)
+    try:
+        verified = directory_identity(verified_fd)
+    finally:
+        os.close(verified_fd)
+    if (identity.device, identity.inode) != (verified.device, verified.inode):
+        raise PreparationError("Repository path does not identify the supplied root descriptor")
     return {"root": absolute, "device": identity.device, "inode": identity.inode}
 
 
@@ -94,7 +102,10 @@ def _read_descriptor(descriptor: int) -> tuple[bytes, os.stat_result]:
         if total > _MAX_FILE_BYTES:
             raise PreparationError("Existing target exceeds the 64 KiB preparation limit")
     after = os.fstat(descriptor)
-    stable_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns", "st_nlink")
+    stable_fields = (
+        "st_dev", "st_ino", "st_mode", "st_uid", "st_gid",
+        "st_size", "st_mtime_ns", "st_ctime_ns", "st_nlink",
+    )
     if any(getattr(before, field) != getattr(after, field) for field in stable_fields):
         raise PreparationError("Existing target changed while it was being read")
     content = b"".join(chunks)
@@ -120,7 +131,10 @@ def snapshot_operation(
     elif proposed_content is not None:
         raise PreparationError("Delete operation cannot have prepared content")
 
-    parent_fd = open_existing_parent(repository_root_fd, parts[:-1])
+    try:
+        parent_fd = open_existing_parent(repository_root_fd, parts[:-1])
+    except FilesystemSafetyError as exc:
+        raise PreparationError(str(exc)) from exc
     try:
         if operation == "create":
             if expected_sha256 is not None:
@@ -213,6 +227,7 @@ def prepare_transaction(
     proposal_id: str,
     proposal_sha256: str,
     repository: dict[str, object],
+    repository_root_fd: int,
     operations: Sequence[PreparedOperation],
     transaction_id: str | None = None,
 ) -> PreparedTransaction:
@@ -232,6 +247,9 @@ def prepare_transaction(
             or type(repository.get("device")) is not int or repository["device"] < 0
             or type(repository.get("inode")) is not int or repository["inode"] < 0):
         raise PreparationError("Repository identity is malformed")
+    actual_identity = directory_identity(repository_root_fd)
+    if (actual_identity.device, actual_identity.inode) != (repository["device"], repository["inode"]):
+        raise PreparationError("Repository descriptor does not match the recorded repository identity")
     if not 1 <= len(operations) <= 32:
         raise PreparationError("Transaction must contain 1 to 32 operations")
     transaction_id = transaction_id or uuid.uuid4().hex
