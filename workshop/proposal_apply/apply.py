@@ -202,6 +202,7 @@ def rollback_transaction(
                         temp_is_same = temporary is not None and (
                             temporary[1].st_dev == target_info.st_dev
                             and temporary[1].st_ino == target_info.st_ino
+                            and temporary[1].st_nlink == 2 and target_info.st_nlink == 2
                         )
                         applied_is_same = _same_identity(
                             target_info, operation.get("applied_device"), operation.get("applied_inode")
@@ -243,6 +244,7 @@ def rollback_transaction(
                         and temporary is not None
                         and temporary[1].st_dev == target_info.st_dev
                         and temporary[1].st_ino == target_info.st_ino
+                        and temporary[1].st_nlink == 2 and target_info.st_nlink == 2
                         and _same_identity(
                             temporary[1], operation.get("temporary_device"), operation.get("temporary_inode")
                         )
