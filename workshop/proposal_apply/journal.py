@@ -184,7 +184,7 @@ def validate_journal(value: object) -> dict[str, Any]:
             status = operation.get("status")
             if not isinstance(status, str) or status not in _PROGRESS_STATES:
                 raise JournalError("Journal operation progress state is invalid")
-            prefix = ".workshop-txn-" + value["transaction_id"][:8] + f"-{expected_index:04d}-"
+            prefix = ".workshop-txn-" + value["transaction_id"] + f"-{expected_index:04d}"
             invalid_chars = lambda name: "/" in name or chr(92) in name or chr(0) in name
             if (not isinstance(temporary_name, str) or not temporary_name.startswith(prefix)
                     or not temporary_name.endswith(".tmp") or invalid_chars(temporary_name)):
