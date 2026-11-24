@@ -228,6 +228,32 @@ class ProposalCrashRecoveryTests(unittest.TestCase):
             self.assertEqual((root / "docs/old.txt").read_bytes(), b"remove me")
             self.assertFalse((root / "docs/new.txt").exists())
 
+    def test_symlink_swap_during_quarantine_is_never_followed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root, home, store, staged, digest = self._case(Path(temp))
+            external = Path(temp) / "outside-secret.txt"
+            external.write_text("do not read or modify", encoding="utf-8")
+            from workshop.proposal_apply import apply as apply_module
+            original_link = apply_module.link_file_at
+
+            def swap_to_symlink(parent_fd: int, source: str, destination: str) -> None:
+                if source == "note.txt" and destination.endswith(".quarantine"):
+                    os.unlink(source, dir_fd=parent_fd)
+                    os.symlink(str(external), source, dir_fd=parent_fd)
+                original_link(parent_fd, source, destination)
+
+            output = TTY()
+            with patch("workshop.proposal_apply.apply.link_file_at", side_effect=swap_to_symlink):
+                with self.assertRaises(ProposalApplyServiceError):
+                    apply_proposal(
+                        store, staged.proposal_id, digest,
+                        input_stream=TTY(f"APPLY {staged.proposal_id} {digest}\n"),
+                        output_stream=output,
+                    )
+            self.assertTrue((root / "docs/note.txt").is_symlink())
+            self.assertEqual(external.read_text(encoding="utf-8"), "do not read or modify")
+            self.assertFalse((root / "docs/note.txt").read_text(encoding="utf-8") == external.read_text(encoding="utf-8"))
+
     def test_extra_hardlink_during_quarantine_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root, home, store, staged, digest = self._case(Path(temp))
