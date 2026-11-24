@@ -34,6 +34,8 @@ def require_posix_support() -> None:
         raise FilesystemSafetyError("Required descriptor-relative filesystem operations are unavailable")
     if os.stat not in os.supports_follow_symlinks:
         raise FilesystemSafetyError("No-follow stat support is unavailable")
+    if os.listdir not in os.supports_fd or not all(hasattr(os, name) for name in ("fchmod", "fsync")):
+        raise FilesystemSafetyError("Required private transaction storage primitives are unavailable")
     try:
         import fcntl  # noqa: F401
     except ImportError as exc:
@@ -210,6 +212,7 @@ def create_private_directory_at(parent_fd: int, name: str) -> int:
         os.close(descriptor)
         raise
 
+
 def fsync_directory(directory_fd: int) -> None:
     """Flush directory metadata or fail explicitly when the filesystem cannot."""
     try:
@@ -317,7 +320,7 @@ def replace_private_file_at(directory_fd: int, name: str, content: bytes) -> Non
     else:
         os.close(descriptor)
     try:
-        os.replace(temporary, name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+        os.rename(temporary, name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
         fsync_directory(directory_fd)
     except BaseException:
         try:
