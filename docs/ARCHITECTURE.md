@@ -8,10 +8,11 @@ A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded
 
 ## Current components
 
-- `workshop/cli.py` - task, context, and provider-policy commands.
+- `workshop/cli.py` - task, context, provider-policy, proposal staging/preview, and proposal apply/recovery commands.
 - `workshop/models.py`, `task_store.py` - task/checkpoint models and JSON persistence.
 - `workshop/context_manager.py` - allowlisted context, symlink containment, and word budgets.
-- `workshop/proposals.py` - bounded proposal validation, expected-hash checks, private staging, and read-only diffs.
+- `workshop/proposals.py` - bounded untrusted proposal validation, repository identity binding, expected-hash checks, private staging, and read-only diffs.
+- `workshop/proposal_apply/` - POSIX-only approval, descriptor-relative filesystem access, advisory locks, durable journals, private transaction preparation, no-overwrite application, rollback, recovery inventory, and interactive recovery.
 - `workshop/handoff.py` - Markdown handoffs with checkpoint state.
 - `workshop/providers/base.py` - provider-neutral message, response, and adapter protocol.
 - `policy.py` - strict catalog parsing and fail-closed free-tier preflight.
@@ -42,6 +43,6 @@ The runtime targets Python 3.10+ and the standard library. No paid usage is allo
 
 ## Browser-assistant proposal boundary
 
-The importer accepts a versioned, size-bounded JSON bundle, not executable assistant output. Each operation names a repository-relative path and expected SHA-256 of the current file, or explicitly declares a new file. Validation rejects absolute paths, traversal, symlinks, protected state, credential-like paths, unsupported operations, duplicate paths, oversized content, and stale hashes. Proposals are staged under ignored `.workshop/proposals/`; staged records carry an integrity checksum and are revalidated against current repository preconditions before a read-only diff is shown. Optional task IDs and context-bundle SHA-256 values preserve provenance without copying context contents. Checksums detect accidental corruption, not author identity.
+The importer accepts a versioned, size-bounded JSON bundle, not executable assistant output. Each operation names a repository-relative path and expected SHA-256 of the current file, or explicitly declares a new file. Validation rejects absolute paths, traversal, symlinks, protected state, credential-like paths, unsupported operations, duplicate paths, oversized content, and stale hashes. Staged records bind the canonical repository path/device/inode identity and carry integrity checksums. Optional task IDs and context-bundle SHA-256 values preserve provenance without copying context contents. Checksums detect accidental corruption, not author identity.
 
-Imported bundles are untrusted data. The current workflow does not execute shell commands, install dependencies, call providers, or apply files. Any future apply action must be separate, explicitly approved, and recheck hashes immediately before writing. Commits, pushes, pull requests, and merges remain separate approval-gated actions.
+Proposal application is separate from import and preview. On POSIX, it requires the complete staged-record SHA-256 and exact interactive confirmation, revalidates repository identity and target snapshots, and uses descriptor-relative no-follow operations, private locks, durable journals/backups, and no-overwrite installation. Application failures trigger rollback; interrupted transactions are recovered through a separate interactive command bound to the journal SHA-256. Committed transactions permit cleanup only. Missing parent directories are rejected. The workflow does not execute proposal content, run shell commands, install dependencies, call providers, or perform Git writes. Multi-file application is recoverable but not globally atomic to external observers; advisory locks coordinate cooperating processes only. Commits, pushes, pull requests, and merges remain separate approval-gated actions.

@@ -42,16 +42,18 @@ The master template is upgraded incrementally. A checked box means the behavior 
 - [x] Validate repository-relative paths, operation types, expected file hashes, and protected/credential-like paths before staging.
 - [x] Store proposals privately under ignored `.workshop/proposals/` state with source, timestamp, and bundle-hash provenance.
 - [x] Generate read-only diffs, checksum staged records, escape terminal control characters, and reject stale/conflicting previews.
-- [x] Keep command execution and file application out of import/preview; no proposal content is executed or automatically applied.
+- [x] Keep command execution out of proposal handling; proposal application is a separate interactive, approval-gated workflow.
 - [x] Review and approve the finalized [proposal-application safety design](PROPOSAL_APPLICATION_DESIGN.md) before implementation.
 - [x] Preserve optional workshop task ID and exact context-bundle SHA-256 in proposal metadata without copying context contents.
 - [ ] Add manual fallback instructions when API quotas are exhausted.
 
-## Proposal apply safety gate (staged implementation)
+## Proposal application safety (implemented)
 
-The proposed design is documented in [docs/PROPOSAL_APPLICATION_DESIGN.md](PROPOSAL_APPLICATION_DESIGN.md). Selected decisions: POSIX-first with fail-closed capability checks; rollback as the default interrupted-transaction recovery; existing parent directories only; and interactive confirmation bound to the full staged-record SHA-256 digest.
+The approved POSIX-only design is documented in [docs/PROPOSAL_APPLICATION_DESIGN.md](PROPOSAL_APPLICATION_DESIGN.md). Decisions: fail closed when required POSIX primitives are unavailable; rollback interrupted transactions by default; require existing parent directories; and require interactive confirmation bound to the complete staged-record SHA-256 digest.
 
-The design was approved on 2026-11-23. Stage 1 (POSIX filesystem primitives and advisory locks) was squash-merged by PR #23 into the design branch; `main` remains unchanged. Stage 2 (canonical journals, private backups/prepared files, lock-held snapshots, and read-only recovery inventory) was squash-merged by PR #24; CI passed on Python 3.10–3.13. Stage 3 is implemented in draft [PR #25](https://github.com/hapu/ai-workshop-template/pull/25): interactive digest-bound approval, recomputed live diffs, journaled no-overwrite application, rollback, and explicit recovery/cleanup commands. It is not merged. Stage 4 crash-injection and adversarial race/recovery testing is the active gate; do not merge stage 3 until those tests pass on Python 3.10–3.13. Git commits, pushes, PRs, and merges remain separate approvals. `main` still has no apply or recovery command.
+Implementation stages 1–4 were promoted to `main` by [PR #26](https://github.com/hapu/ai-workshop-template/pull/26). The merged implementation includes descriptor-relative filesystem primitives, advisory locks, canonical durable journals, private backups/prepared payloads, repository-bound staged records, recomputed live diffs, no-overwrite create/update/delete application, rollback, explicit journal-digest-bound recovery, and crash-injection/adversarial tests. The promotion CI run [#158](https://github.com/hapu/ai-workshop-template/actions/runs/45327477908) passed on Python 3.10–3.13.
+
+The command is POSIX-only and interactive. It does not execute proposal content, invoke providers, install packages, run shell commands, or perform Git writes. Multi-file application is recoverable but is not atomically visible as a group to external observers. Git commits, pushes, pull requests, and merges remain separate approvals.
 
 ## Phase 5: Controlled development automation
 - [ ] Add opt-in project checks and isolated execution.
