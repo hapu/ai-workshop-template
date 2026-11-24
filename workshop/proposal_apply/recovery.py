@@ -13,6 +13,7 @@ from .filesystem import (
     open_existing_parent,
     open_private_directory_at,
     open_regular_file_at,
+    open_repository_root,
     read_private_file_at,
 )
 from .journal import JournalError, read_journal
@@ -124,6 +125,7 @@ def inventory_transaction(
     transaction_id: str,
     *,
     repository_root_fd: int | None = None,
+    repository_root_path: str | os.PathLike[str] | None = None,
 ) -> dict[str, Any]:
     """Inspect private transaction artifacts and optionally current targets.
 
@@ -187,12 +189,23 @@ def inventory_transaction(
         unexpected_root_entries = sorted(actual_root_entries - expected_root_entries)
         identity_matches: bool | None = None
         target_states: list[dict[str, Any]] | None = None
-        if repository_root_fd is not None:
+        if (repository_root_fd is None) != (repository_root_path is None):
+            raise RecoveryInventoryError("Provide both the repository root descriptor and its path")
+        if repository_root_fd is not None and repository_root_path is not None:
             actual_identity = directory_identity(repository_root_fd)
             recorded = journal["repository_identity"]
+            supplied_path = os.path.abspath(os.fspath(repository_root_path))
+            verified_fd = open_repository_root(supplied_path)
+            try:
+                path_identity = directory_identity(verified_fd)
+            finally:
+                os.close(verified_fd)
             identity_matches = (
-                actual_identity.device == recorded["device"]
+                supplied_path == recorded["root"]
+                and actual_identity.device == recorded["device"]
                 and actual_identity.inode == recorded["inode"]
+                and path_identity.device == recorded["device"]
+                and path_identity.inode == recorded["inode"]
             )
             if identity_matches:
                 target_states = [
