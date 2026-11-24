@@ -256,12 +256,35 @@ def prepare_transaction(
     if not re.fullmatch(r"[0-9a-f]{32}", transaction_id):
         raise PreparationError("Invalid transaction ID")
 
+    records: list[dict[str, object]] = []
+    payloads: list[tuple[bytes | None, bytes | None]] = []
+    seen: set[str] = set()
+    for index, item in enumerate(operations, 1):
+        _validate_path(item.path)
+        if item.path.casefold() in seen:
+            raise PreparationError("Duplicate operation paths are not allowed")
+        seen.add(item.path.casefold())
+        record, backup, prepared = _operation_record(index, item)
+        records.append(record)
+        payloads.append((backup, prepared))
+
     transactions_fd = open_private_directory_at(proposal_dir_fd, "transactions", create=True)
     try:
         transaction_fd = create_private_directory_at(transactions_fd, transaction_id)
     finally:
         os.close(transactions_fd)
     try:
+        journal: dict[str, object] = {
+            "format": "ai-workshop-proposal-transaction",
+            "version": 1,
+            "transaction_id": transaction_id,
+            "proposal_id": proposal_id,
+            "proposal_sha256": proposal_sha256,
+            "repository_identity": dict(repository),
+            "state": "PREPARING",
+            "operations": records,
+        }
+        write_journal(transaction_fd, journal)
         backups_fd = open_private_directory_at(transaction_fd, "backups", create=True)
         try:
             prepared_fd = open_private_directory_at(transaction_fd, "prepared", create=True)
@@ -269,29 +292,6 @@ def prepare_transaction(
             os.close(backups_fd)
             raise
         try:
-            records: list[dict[str, object]] = []
-            payloads: list[tuple[bytes | None, bytes | None]] = []
-            seen: set[str] = set()
-            for index, item in enumerate(operations, 1):
-                _validate_path(item.path)
-                if item.path.casefold() in seen:
-                    raise PreparationError("Duplicate operation paths are not allowed")
-                seen.add(item.path.casefold())
-                record, backup, prepared = _operation_record(index, item)
-                records.append(record)
-                payloads.append((backup, prepared))
-
-            journal: dict[str, object] = {
-                "format": "ai-workshop-proposal-transaction",
-                "version": 1,
-                "transaction_id": transaction_id,
-                "proposal_id": proposal_id,
-                "proposal_sha256": proposal_sha256,
-                "repository_identity": dict(repository),
-                "state": "PREPARING",
-                "operations": records,
-            }
-            sealed = write_journal(transaction_fd, journal)
             for index, (backup, prepared) in enumerate(payloads, 1):
                 filename = f"{index:04d}.bin"
                 if backup is not None:
