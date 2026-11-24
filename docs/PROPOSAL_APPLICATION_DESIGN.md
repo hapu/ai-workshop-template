@@ -1,6 +1,6 @@
 # Proposal Application Safety Design
 
-**Status:** Finalized for review; not implemented  
+**Status:** Approved; implementation in staged review  
 **Decision date:** 2026-11-23  
 **Scope:** Local application of staged browser-assistant file proposals  
 **Selected platform:** POSIX  
@@ -352,4 +352,4 @@ Implementation may begin only after this document has been reviewed and approved
 4. Adversarial race, concurrency, and crash-injection tests.
 5. Documentation updates and full repository checks.
 
-Until approval, do not add an apply or recover command, do not write proposal contents into repository targets, and do not change the read-only behavior of import or preview.
+Until stage 3 is separately reviewed and accepted, do not add an apply or recover command, do not write proposal contents into repository targets, and do not change the read-only behavior of import or preview.

@@ -161,6 +161,10 @@ class ProposalApplyLockTests(unittest.TestCase):
             if process.poll() is None:
                 process.terminate()
                 process.wait(timeout=5)
+            if process.stdout is not None:
+                process.stdout.close()
+            if process.stderr is not None:
+                process.stderr.close()
 
     def test_lock_is_released_when_context_exits(self) -> None:
         with advisory_lock(self.state_fd, "release.lock", timeout=0.1):
