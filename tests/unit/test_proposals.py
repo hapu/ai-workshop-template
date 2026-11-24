@@ -187,6 +187,26 @@ class ProposalTests(unittest.TestCase):
                 "expected_sha256": None, "content": "replace",
             }))
 
+    def test_preview_recomputes_diff_instead_of_trusting_stored_text(self) -> None:
+        staged = self.store.stage(bundle({
+            "op": "update", "path": "note.txt", "expected_sha256": hashlib.sha256(b"old").hexdigest(),
+            "content": "new",
+        }))
+        record_path = staged.directory / "proposal.json"
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record["previews"][0]["diff"] = "FORGED: no changes"
+        unsigned = {key: value for key, value in record.items() if key != "record_sha256"}
+        canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        record["record_sha256"] = hashlib.sha256(canonical).hexdigest()
+        record_path.write_text(
+            json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+            encoding="utf-8",
+        )
+        preview = self.store.preview(staged.proposal_id)
+        self.assertNotIn("FORGED", preview)
+        self.assertIn("-old", preview)
+        self.assertIn("+new", preview)
+
     def test_preview_rejects_tampered_staging_record(self) -> None:
         staged = self.store.stage(bundle({
             "op": "create", "path": "new.txt", "expected_sha256": None, "content": "safe",
