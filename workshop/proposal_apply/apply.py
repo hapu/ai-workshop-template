@@ -309,7 +309,10 @@ def rollback_transaction(
                                 temporary[1], operation.get("temporary_device"), operation.get("temporary_inode")
                             ):
                                 raise ApplyError(f"Unverified rollback temporary: {temporary_name}")
-                            if _sha256(temporary[0]) != original_digest:
+                            temporary_digest = _sha256(temporary[0])
+                            if temporary_digest != original_digest:
+                                if proposed_digest is None or temporary_digest != proposed_digest:
+                                    raise ApplyError(f"Temporary file content changed during rollback: {temporary_name}")
                                 unlink_file_at(parent_fd, temporary_name)
                                 temporary = None
                         if temporary is None:
