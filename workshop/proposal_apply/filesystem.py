@@ -267,7 +267,7 @@ def read_private_file_at(directory_fd: int, name: str, *, max_bytes: int = 1024 
     try:
         info = os.fstat(descriptor)
         if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
-                or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) & 0o077):
+                or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600):
             raise FilesystemSafetyError(f"Private file ownership or mode is unsafe: {name}")
         if info.st_size > max_bytes:
             raise FilesystemSafetyError(f"Private file exceeds the size limit: {name}")
