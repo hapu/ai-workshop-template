@@ -122,6 +122,28 @@ class ProposalApplyEngineTests(unittest.TestCase):
                 )
         self.assertEqual((self.root / "docs/note.txt").read_bytes(), b"updated note")
 
+    def test_recomputed_journal_tampering_is_rejected_against_live_snapshot(self) -> None:
+        from workshop.proposal_apply.journal import write_journal
+
+        transaction_fd = self._journal()
+        try:
+            journal = read_journal(transaction_fd)
+            journal["operations"][0]["original_mode"] = 0o777
+            write_journal(transaction_fd, journal)
+        finally:
+            os.close(transaction_fd)
+        with transaction_locks(self.state_fd, f"proposal-{self.staged.proposal_id}.lock"):
+            with self.assertRaisesRegex(ApplyError, "live snapshot"):
+                apply_prepared_transaction(
+                    self.proposal_fd, self.root_fd, self.prepared.transaction_id,
+                    proposal_id=self.staged.proposal_id,
+                    proposal_sha256=self.record["record_sha256"],
+                    repository_root_path=self.root,
+                    operations=self.operations,
+                    snapshots=self.snapshots,
+                )
+        self.assertEqual((self.root / "docs/note.txt").read_bytes(), b"original note")
+
     def test_stale_target_aborts_before_apply_state_or_writes(self) -> None:
         target = self.root / "docs/note.txt"
         target.write_bytes(b"changed after preparation")
