@@ -367,6 +367,59 @@ def rollback_transaction(
         os.close(backups_fd)
 
 
+
+def cleanup_committed_transaction(
+    transaction_fd: int,
+    repository_root_fd: int,
+    *,
+    repository_root_path: str | os.PathLike[str],
+) -> tuple[str, ...]:
+    """Remove only verified quarantine links after a durable COMMITTED marker."""
+    journal = read_journal(transaction_fd)
+    if journal["state"] != "COMMITTED" or journal["version"] != 2:
+        raise ApplyError("Only a committed version-two transaction can be cleaned up")
+    recorded = journal["repository_identity"]
+    identity = directory_identity(repository_root_fd)
+    supplied_path = os.path.abspath(os.fspath(repository_root_path))
+    if supplied_path != recorded["root"] or (
+        identity.device != recorded["device"] or identity.inode != recorded["inode"]
+    ):
+        raise ApplyError("Repository identity does not match the committed transaction")
+    verified_fd = open_repository_root(supplied_path)
+    try:
+        verified = directory_identity(verified_fd)
+    finally:
+        os.close(verified_fd)
+    if (verified.device, verified.inode) != (recorded["device"], recorded["inode"]):
+        raise ApplyError("Repository path was replaced since commit")
+
+    warnings: list[str] = []
+    for operation in journal["operations"]:
+        parts = operation["path"].split("/")
+        parent_fd = open_existing_parent(repository_root_fd, parts[:-1])
+        try:
+            quarantine_name = operation["quarantine_name"]
+            if quarantine_name is not None:
+                entry = _entry(parent_fd, quarantine_name)
+                if entry is not None:
+                    data, info = entry
+                    if (_sha256(data) != operation["original_sha256"]
+                            or not _same_identity(
+                                info, operation.get("quarantine_device"), operation.get("quarantine_inode")
+                            )):
+                        warnings.append(f"Refused unexpected quarantine entry: {quarantine_name}")
+                    else:
+                        unlink_file_at(parent_fd, quarantine_name)
+            temporary_name = operation["temporary_name"]
+            temporary = _entry(parent_fd, temporary_name)
+            if temporary is not None:
+                warnings.append(f"Unexpected temporary sibling remains after commit: {temporary_name}")
+        except (OSError, FilesystemSafetyError, ApplyError) as exc:
+            warnings.append(f"Could not clean transaction siblings for {operation['path']}: {exc}")
+        finally:
+            os.close(parent_fd)
+    return tuple(warnings)
+
 def apply_prepared_transaction(
     proposal_dir_fd: int,
     repository_root_fd: int,
