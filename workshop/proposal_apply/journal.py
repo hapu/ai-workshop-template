@@ -87,7 +87,7 @@ def validate_journal(value: object) -> dict[str, Any]:
         raise JournalError("Invalid proposal ID in journal")
     if not _is_sha(value.get("proposal_sha256")):
         raise JournalError("Invalid proposal digest in journal")
-    if value.get("state") not in _STATES:
+    if not isinstance(value.get("state"), str) or value["state"] not in _STATES:
         raise JournalError("Unknown transaction state")
 
     identity = value.get("repository_identity")
@@ -111,7 +111,7 @@ def validate_journal(value: object) -> dict[str, Any]:
             raise JournalError("Journal operation fields are malformed")
         if type(operation.get("index")) is not int or operation["index"] != expected_index:
             raise JournalError("Journal operation indexes must be sequential")
-        if operation.get("op") not in {"create", "update", "delete"}:
+        if not isinstance(operation.get("op"), str) or operation["op"] not in {"create", "update", "delete"}:
             raise JournalError("Journal operation type is invalid")
         path = operation.get("path")
         if not _validate_path(path) or path.casefold() in seen:
@@ -153,7 +153,7 @@ def validate_journal(value: object) -> dict[str, Any]:
                 raise JournalError("Update operation original metadata is invalid")
             if backup != f"{expected_index:04d}.bin" or prepared != f"{expected_index:04d}.bin":
                 raise JournalError("Update operation private filenames are invalid")
-            if backup_size != operation["original_size"] or type(prepared_size) is not int or not 0 <= prepared_size <= 65536:
+            if type(backup_size) is not int or backup_size != operation["original_size"] or type(prepared_size) is not int or not 0 <= prepared_size <= 65536:
                 raise JournalError("Update operation private-file sizes are invalid")
         else:
             if (not _is_sha(expected) or not _is_sha(original) or expected != original
@@ -168,7 +168,7 @@ def validate_journal(value: object) -> dict[str, Any]:
                     or type(operation.get("original_size")) is not int
                     or not 0 <= operation["original_size"] <= 65536):
                 raise JournalError("Delete operation original metadata is invalid")
-            if backup != f"{expected_index:04d}.bin" or backup_size != operation["original_size"]:
+            if backup != f"{expected_index:04d}.bin" or type(backup_size) is not int or backup_size != operation["original_size"]:
                 raise JournalError("Delete operation backup metadata is invalid")
 
     if not _is_sha(value.get("journal_sha256")):
