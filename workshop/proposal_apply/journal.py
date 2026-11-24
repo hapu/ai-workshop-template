@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import re
 from typing import Any
 
@@ -21,6 +22,8 @@ _TOP_KEYS = {
     "format", "version", "transaction_id", "proposal_id", "proposal_sha256",
     "repository_identity", "state", "operations", "journal_sha256",
 }
+_PROTECTED_PARTS = {".git", ".workshop", "secrets", "__pycache__", ".ssh", ".aws", ".azure"}
+_SECRET_PART = re.compile(r"(^\\.env(?:\\.|$)|\\.(?:pem|key|p12|pfx)$|(?:^|[._-])(credentials?|secrets?|token|api[-_]?key|private-key)(?:[._-]|$))", re.I)
 _OPERATION_KEYS = {
     "index", "op", "path", "expected_sha256", "original_sha256",
     "proposed_sha256", "original_mode", "original_device", "original_inode",
@@ -63,7 +66,13 @@ def _validate_path(value: object) -> bool:
     if any(ord(char) < 32 or ord(char) == 127 for char in value):
         return False
     parts = value.split("/")
-    return all(part not in {"", ".", ".."} for part in parts)
+    if not all(part not in {"", ".", ".."} for part in parts):
+        return False
+    if any(part.casefold() in _PROTECTED_PARTS or _SECRET_PART.search(part) for part in parts):
+        return False
+    folded = value.casefold()
+    return (folded not in {".gitignore", ".gitattributes", ".gitmodules", "config/provider-catalog.json"}
+            and not folded.startswith(".github/workflows/"))
 
 
 def validate_journal(value: object) -> dict[str, Any]:
@@ -133,7 +142,7 @@ def validate_journal(value: object) -> dict[str, Any]:
                     or not _is_sha(proposed)):
                 raise JournalError("Update operation digest preconditions are invalid")
             if (type(operation.get("original_mode")) is not int
-                    or operation["original_mode"] < 0
+                    or not 0 <= operation["original_mode"] <= 0o7777
                     or not _is_optional_nonnegative_int(operation.get("original_device"))
                     or operation.get("original_device") is None
                     or not _is_optional_nonnegative_int(operation.get("original_inode"))
