@@ -90,6 +90,7 @@ def directory_identity(descriptor: int) -> DirectoryIdentity:
 
 
 def open_directory_at(parent_fd: int, name: str) -> int:
+    require_posix_support()
     """Open one existing child directory without following a symlink."""
     name = _component(name)
     try:
@@ -117,6 +118,7 @@ def open_directory_at(parent_fd: int, name: str) -> int:
 
 
 def open_existing_parent(root_fd: int, components: Iterable[str]) -> int:
+    require_posix_support()
     """Traverse existing directory components and return the final descriptor.
 
     The caller owns the returned descriptor. An empty component sequence
@@ -135,6 +137,7 @@ def open_existing_parent(root_fd: int, components: Iterable[str]) -> int:
 
 
 def open_regular_file_at(parent_fd: int, name: str) -> int:
+    require_posix_support()
     """Open an existing single-link regular file read-only, without following links."""
     name = _component(name)
     try:
@@ -177,6 +180,7 @@ def _verify_private_directory(descriptor: int) -> None:
 
 
 def open_private_directory_at(parent_fd: int, name: str, *, create: bool = False) -> int:
+    require_posix_support()
     """Open or create an owner-only private child directory."""
     name = _component(name)
     if create:
@@ -197,6 +201,7 @@ def open_private_directory_at(parent_fd: int, name: str, *, create: bool = False
 
 
 def create_private_directory_at(parent_fd: int, name: str) -> int:
+    require_posix_support()
     """Create a new private child directory; fail if the name already exists."""
     name = _component(name)
     try:
@@ -214,6 +219,7 @@ def create_private_directory_at(parent_fd: int, name: str) -> int:
 
 
 def fsync_directory(directory_fd: int) -> None:
+    require_posix_support()
     """Flush directory metadata or fail explicitly when the filesystem cannot."""
     try:
         os.fsync(directory_fd)
@@ -233,6 +239,7 @@ def _write_all(descriptor: int, content: bytes) -> None:
 
 
 def create_private_file_at(directory_fd: int, name: str, content: bytes) -> None:
+    require_posix_support()
     """Create a new owner-only private file, flush its bytes and directory entry."""
     name = _component(name)
     if not isinstance(content, bytes):
@@ -260,6 +267,7 @@ def create_private_file_at(directory_fd: int, name: str, content: bytes) -> None
 
 
 def read_private_file_at(directory_fd: int, name: str, *, max_bytes: int = 1024 * 1024) -> bytes:
+    require_posix_support()
     """Read a bounded owner-only regular file without following links."""
     name = _component(name)
     flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
@@ -291,6 +299,7 @@ def read_private_file_at(directory_fd: int, name: str, *, max_bytes: int = 1024 
 
 
 def replace_private_file_at(directory_fd: int, name: str, content: bytes) -> None:
+    require_posix_support()
     """Atomically replace one private file using a flushed same-directory temp."""
     name = _component(name)
     try:
