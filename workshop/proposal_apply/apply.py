@@ -21,6 +21,7 @@ from .filesystem import (
     unlink_file_at,
 )
 from .journal import JournalError, read_journal, write_journal
+from .transaction import PreparedOperation
 from ..proposals import ProposalOperation
 
 
@@ -434,6 +435,7 @@ def apply_prepared_transaction(
     proposal_sha256: str,
     repository_root_path: str | os.PathLike[str],
     operations: Sequence[ProposalOperation],
+    snapshots: Sequence[PreparedOperation],
 ) -> ApplyResult:
     """Apply a PREPARED transaction after interactive approval has succeeded.
 
@@ -451,15 +453,44 @@ def apply_prepared_transaction(
                 or journal["proposal_id"] != proposal_id
                 or journal["proposal_sha256"] != proposal_sha256):
             raise ApplyError("Prepared transaction does not match the approved proposal")
-        if len(operations) != len(journal["operations"]):
+        if (len(operations) != len(journal["operations"])
+                or len(snapshots) != len(journal["operations"])):
             raise ApplyError("Prepared operation count differs from the approved staged proposal")
-        for staged, prepared in zip(operations, journal["operations"]):
+        for index, (staged, snapshot, prepared) in enumerate(zip(
+            operations, snapshots, journal["operations"]
+        ), start=1):
             proposed = staged.content.encode("utf-8") if staged.content is not None else None
             proposed_digest = _sha256(proposed) if proposed is not None else None
-            if (staged.operation != prepared["op"] or staged.path != prepared["path"]
-                    or staged.expected_sha256 != prepared["expected_sha256"]
-                    or proposed_digest != prepared["proposed_sha256"]):
-                raise ApplyError("Prepared journal operations differ from the approved staged proposal")
+            original_digest = _sha256(snapshot.original_content) if snapshot.original_content is not None else None
+            prefix = f".workshop-txn-{transaction_id}-{index:04d}"
+            expected_quarantine = None if staged.operation == "create" else prefix + ".quarantine"
+            if (
+                staged.operation != prepared["op"]
+                or staged.path != prepared["path"]
+                or staged.expected_sha256 != prepared["expected_sha256"]
+                or proposed_digest != prepared["proposed_sha256"]
+                or snapshot.operation != staged.operation
+                or snapshot.path != staged.path
+                or snapshot.expected_sha256 != staged.expected_sha256
+                or snapshot.proposed_content != proposed
+                or original_digest != prepared["original_sha256"]
+                or snapshot.original_mode != prepared["original_mode"]
+                or snapshot.original_device != prepared["original_device"]
+                or snapshot.original_inode != prepared["original_inode"]
+                or (len(snapshot.original_content) if snapshot.original_content is not None else None)
+                    != prepared["original_size"]
+                or (len(proposed) if proposed is not None else None) != prepared["prepared_size"]
+                or prepared["backup_file"] != (f"{index:04d}.bin" if snapshot.original_content is not None else None)
+                or prepared["prepared_file"] != (f"{index:04d}.bin" if proposed is not None else None)
+                or prepared["temporary_name"] != prefix + ".tmp"
+                or prepared["quarantine_name"] != expected_quarantine
+                or prepared["status"] != "PENDING"
+                or any(prepared.get(key) is not None for key in (
+                    "applied_device", "applied_inode", "quarantine_device",
+                    "quarantine_inode", "temporary_device", "temporary_inode",
+                ))
+            ):
+                raise ApplyError("Prepared journal differs from the approved proposal or live snapshot")
         recorded = journal["repository_identity"]
         identity = directory_identity(repository_root_fd)
         if identity.device != recorded["device"] or identity.inode != recorded["inode"]:
