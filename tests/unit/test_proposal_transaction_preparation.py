@@ -163,6 +163,23 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         self.assertFalse(inventory["private_artifacts_verified"])
         self.assertEqual((self.repository / "docs/old.txt").read_bytes(), b"remove me")
 
+    def test_inventory_reports_missing_preparation_directories(self) -> None:
+        prepared = self._prepare()
+        transaction_fd = self._open_transaction(prepared.transaction_id)
+        try:
+            for directory_name in ("backups", "prepared"):
+                directory_fd = open_private_directory_at(transaction_fd, directory_name)
+                try:
+                    for filename in os.listdir(directory_fd):
+                        os.unlink(filename, dir_fd=directory_fd)
+                finally:
+                    os.close(directory_fd)
+                os.rmdir(directory_name, dir_fd=transaction_fd)
+        finally:
+            os.close(transaction_fd)
+        inventory = inventory_transaction(self.proposal_fd, prepared.transaction_id)
+        self.assertEqual(inventory["missing_transaction_entries"], ["backups", "prepared"])
+        self.assertFalse(inventory["private_artifacts_verified"])
     def test_journal_tampering_is_rejected(self) -> None:
         prepared = self._prepare()
         transaction_fd = self._open_transaction(prepared.transaction_id)
