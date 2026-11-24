@@ -5,7 +5,7 @@ import hmac
 import re
 from typing import TextIO, Sequence
 
-from .proposals import ProposalOperation
+from ..proposals import ProposalOperation
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _PROPOSAL_ID = re.compile(r"^[0-9a-f]{32}$")
