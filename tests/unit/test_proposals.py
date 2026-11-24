@@ -188,6 +188,7 @@ class ProposalTests(unittest.TestCase):
             }))
 
     def test_preview_recomputes_diff_instead_of_trusting_stored_text(self) -> None:
+        (self.root / "note.txt").write_bytes(b"old")
         staged = self.store.stage(bundle({
             "op": "update", "path": "note.txt", "expected_sha256": hashlib.sha256(b"old").hexdigest(),
             "content": "new",
