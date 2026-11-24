@@ -11,7 +11,7 @@ from typing import Any
 from .filesystem import read_private_file_at, replace_private_file_at
 
 _FORMAT = "ai-workshop-proposal-transaction"
-_VERSION = 1
+_VERSION = 2
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _TRANSACTION_ID = re.compile(r"^[0-9a-f]{32}$")
 _STATES = {
@@ -29,6 +29,12 @@ _OPERATION_KEYS = {
     "proposed_sha256", "original_mode", "original_device", "original_inode",
     "original_size", "backup_file", "prepared_file", "backup_size", "prepared_size",
 }
+_OPERATION_PROGRESS_KEYS = {
+    "quarantine_name", "temporary_name", "status", "applied_device",
+    "applied_inode", "quarantine_device", "quarantine_inode",
+    "temporary_device", "temporary_inode",
+}
+_PROGRESS_STATES = {"PENDING", "TEMP_READY", "QUARANTINED", "TARGET_REMOVED", "INSTALLED", "RESTORED", "DONE"}
 
 
 class JournalError(ValueError):
@@ -79,7 +85,7 @@ def validate_journal(value: object) -> dict[str, Any]:
     """Validate the complete versioned journal schema without trusting its digest."""
     if not isinstance(value, dict) or set(value) != _TOP_KEYS:
         raise JournalError("Journal fields do not match the supported schema")
-    if value.get("format") != _FORMAT or type(value.get("version")) is not int or value["version"] != _VERSION:
+    if value.get("format") != _FORMAT or type(value.get("version")) is not int or value["version"] not in {1, _VERSION}:
         raise JournalError("Unsupported transaction journal format or version")
     if not isinstance(value.get("transaction_id"), str) or not _TRANSACTION_ID.fullmatch(value["transaction_id"]):
         raise JournalError("Invalid transaction ID in journal")
@@ -107,7 +113,8 @@ def validate_journal(value: object) -> dict[str, Any]:
         raise JournalError("Journal must contain between 1 and 32 operations")
     seen: set[str] = set()
     for expected_index, operation in enumerate(operations, 1):
-        if not isinstance(operation, dict) or set(operation) != _OPERATION_KEYS:
+        expected_operation_keys = _OPERATION_KEYS | (_OPERATION_PROGRESS_KEYS if value["version"] == 2 else set())
+        if not isinstance(operation, dict) or set(operation) != expected_operation_keys:
             raise JournalError("Journal operation fields are malformed")
         if type(operation.get("index")) is not int or operation["index"] != expected_index:
             raise JournalError("Journal operation indexes must be sequential")
@@ -143,7 +150,7 @@ def validate_journal(value: object) -> dict[str, Any]:
                     or not _is_sha(proposed)):
                 raise JournalError("Update operation digest preconditions are invalid")
             if (type(operation.get("original_mode")) is not int
-                    or not 0 <= operation["original_mode"] <= 0o7777
+                    or not 0 <= operation["original_mode"] <= 0o777
                     or not _is_optional_nonnegative_int(operation.get("original_device"))
                     or operation.get("original_device") is None
                     or not _is_optional_nonnegative_int(operation.get("original_inode"))
@@ -171,6 +178,45 @@ def validate_journal(value: object) -> dict[str, Any]:
             if backup != f"{expected_index:04d}.bin" or type(backup_size) is not int or backup_size != operation["original_size"]:
                 raise JournalError("Delete operation backup metadata is invalid")
 
+        if value["version"] == 2:
+            quarantine_name = operation.get("quarantine_name")
+            temporary_name = operation.get("temporary_name")
+            status = operation.get("status")
+            if not isinstance(status, str) or status not in _PROGRESS_STATES:
+                raise JournalError("Journal operation progress state is invalid")
+            prefix = ".workshop-txn-" + value["transaction_id"] + f"-{expected_index:04d}"
+            invalid_chars = lambda name: "/" in name or chr(92) in name or chr(0) in name
+            if (not isinstance(temporary_name, str) or not temporary_name.startswith(prefix)
+                    or not temporary_name.endswith(".tmp") or invalid_chars(temporary_name)):
+                raise JournalError("Journal temporary sibling filename is invalid")
+            if op == "create":
+                if quarantine_name is not None:
+                    raise JournalError("Create operation cannot have a quarantine filename")
+            elif (not isinstance(quarantine_name, str) or not quarantine_name.startswith(prefix)
+                    or not quarantine_name.endswith(".quarantine") or invalid_chars(quarantine_name)):
+                raise JournalError("Journal quarantine sibling filename is invalid")
+            if temporary_name == quarantine_name:
+                raise JournalError("Journal sibling filenames must be distinct")
+            applied_device = operation.get("applied_device")
+            applied_inode = operation.get("applied_inode")
+            quarantine_device = operation.get("quarantine_device")
+            quarantine_inode = operation.get("quarantine_inode")
+            temporary_device = operation.get("temporary_device")
+            temporary_inode = operation.get("temporary_inode")
+            if (not _is_optional_nonnegative_int(applied_device)
+                    or not _is_optional_nonnegative_int(applied_inode)
+                    or (applied_device is None) != (applied_inode is None)):
+                raise JournalError("Applied target identity is invalid")
+            if (not _is_optional_nonnegative_int(quarantine_device)
+                    or not _is_optional_nonnegative_int(quarantine_inode)
+                    or (quarantine_device is None) != (quarantine_inode is None)):
+                raise JournalError("Quarantine identity is invalid")
+            if op == "create" and (quarantine_device is not None or quarantine_inode is not None):
+                raise JournalError("Create operation cannot have a quarantine identity")
+            if (not _is_optional_nonnegative_int(temporary_device)
+                    or not _is_optional_nonnegative_int(temporary_inode)
+                    or (temporary_device is None) != (temporary_inode is None)):
+                raise JournalError("Temporary sibling identity is invalid")
     if not _is_sha(value.get("journal_sha256")):
         raise JournalError("Journal integrity digest is missing or malformed")
     return value

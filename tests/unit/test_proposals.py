@@ -38,6 +38,60 @@ class ProposalTests(unittest.TestCase):
         self.assertFalse((self.root / "docs/new.md").exists())
         self.assertTrue((staged.directory / "proposal.json").is_file())
 
+    def test_new_staged_record_binds_repository_identity_and_opens_securely(self) -> None:
+        staged = self.store.stage(bundle({
+            "op": "create", "path": "new.txt", "expected_sha256": None, "content": "payload",
+        }))
+        record = json.loads((staged.directory / "proposal.json").read_text(encoding="utf-8"))
+        self.assertEqual(record["version"], 2)
+        self.assertEqual(record["repository_identity"]["root"], str(self.root.resolve()))
+        state_fd, proposal_fd, root_fd, loaded, operations = self.store.open_for_apply(staged.proposal_id)
+        try:
+            self.assertEqual(loaded["record_sha256"], record["record_sha256"])
+            self.assertEqual(operations[0].path, "new.txt")
+            self.assertFalse((self.root / "new.txt").exists())
+        finally:
+            import os
+            for descriptor in (proposal_fd, root_fd, state_fd):
+                os.close(descriptor)
+
+    def test_apply_loader_rejects_tampered_record(self) -> None:
+        staged = self.store.stage(bundle({
+            "op": "create", "path": "new.txt", "expected_sha256": None, "content": "payload",
+        }))
+        record_path = staged.directory / "proposal.json"
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record["source"] = "tampered"
+        record_path.write_text(json.dumps(record), encoding="utf-8")
+        with self.assertRaisesRegex(ProposalError, "integrity check failed"):
+            self.store.open_for_apply(staged.proposal_id)
+
+    def test_apply_loader_rejects_repository_replacement(self) -> None:
+        staged = self.store.stage(bundle({
+            "op": "create", "path": "new.txt", "expected_sha256": None, "content": "payload",
+        }))
+        moved = self.root.with_name("repo-moved")
+        self.root.rename(moved)
+        self.root.mkdir()
+        with self.assertRaisesRegex(ProposalError, "Repository identity changed"):
+            self.store.open_for_apply(staged.proposal_id)
+
+    def test_legacy_staged_record_remains_previewable_but_not_applicable(self) -> None:
+        staged = self.store.stage(bundle({
+            "op": "create", "path": "new.txt", "expected_sha256": None, "content": "payload",
+        }))
+        record_path = staged.directory / "proposal.json"
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record.pop("repository_identity")
+        record["version"] = 1
+        unsigned = {key: value for key, value in record.items() if key != "record_sha256"}
+        canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        record["record_sha256"] = hashlib.sha256(canonical).hexdigest()
+        record_path.write_text(json.dumps(record, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+        self.assertIn("staged_read_only", self.store.preview(staged.proposal_id))
+        with self.assertRaisesRegex(ProposalError, "predates repository identity"):
+            self.store.open_for_apply(staged.proposal_id)
+
     def test_update_requires_current_hash_and_is_read_only(self) -> None:
         target = self.root / "README.md"
         target.write_text("old\n", encoding="utf-8")
@@ -132,6 +186,27 @@ class ProposalTests(unittest.TestCase):
                 "op": "create", "path": "existing.txt",
                 "expected_sha256": None, "content": "replace",
             }))
+
+    def test_preview_recomputes_diff_instead_of_trusting_stored_text(self) -> None:
+        (self.root / "note.txt").write_bytes(b"old")
+        staged = self.store.stage(bundle({
+            "op": "update", "path": "note.txt", "expected_sha256": hashlib.sha256(b"old").hexdigest(),
+            "content": "new",
+        }))
+        record_path = staged.directory / "proposal.json"
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record["previews"][0]["diff"] = "FORGED: no changes"
+        unsigned = {key: value for key, value in record.items() if key != "record_sha256"}
+        canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        record["record_sha256"] = hashlib.sha256(canonical).hexdigest()
+        record_path.write_text(
+            json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+            encoding="utf-8",
+        )
+        preview = self.store.preview(staged.proposal_id)
+        self.assertNotIn("FORGED", preview)
+        self.assertIn("-old", preview)
+        self.assertIn("+new", preview)
 
     def test_preview_rejects_tampered_staging_record(self) -> None:
         staged = self.store.stage(bundle({

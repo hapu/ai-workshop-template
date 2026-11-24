@@ -200,7 +200,8 @@ def _operation_record(index: int, item: PreparedOperation) -> tuple[dict[str, ob
     else:
         if original is None or item.expected_sha256 != _sha256(original):
             raise PreparationError("Original bytes do not match the expected digest")
-        if (type(item.original_mode) is not int or not 0 <= item.original_mode <= 0o7777
+        if (type(item.original_mode) is not int or not 0 <= item.original_mode <= 0o777
+                or not item.original_mode & 0o400
                 or type(item.original_device) is not int or item.original_device < 0
                 or type(item.original_inode) is not int or item.original_inode < 0):
             raise PreparationError("Existing target identity and mode are required")
@@ -283,6 +284,18 @@ def prepare_transaction(
             raise PreparationError("Duplicate operation paths are not allowed")
         seen.add(item.path.casefold())
         record, backup, prepared = _operation_record(index, item)
+        sibling_prefix = f".workshop-txn-{transaction_id}-{index:04d}"
+        record.update({
+            "quarantine_name": None if item.operation == "create" else sibling_prefix + ".quarantine",
+            "temporary_name": sibling_prefix + ".tmp",
+            "status": "PENDING",
+            "applied_device": None,
+            "applied_inode": None,
+            "quarantine_device": None,
+            "quarantine_inode": None,
+            "temporary_device": None,
+            "temporary_inode": None,
+        })
         records.append(record)
         payloads.append((backup, prepared))
 
@@ -294,7 +307,7 @@ def prepare_transaction(
     try:
         journal: dict[str, object] = {
             "format": "ai-workshop-proposal-transaction",
-            "version": 1,
+            "version": 2,
             "transaction_id": transaction_id,
             "proposal_id": proposal_id,
             "proposal_sha256": proposal_sha256,
