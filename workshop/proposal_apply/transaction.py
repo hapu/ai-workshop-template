@@ -13,6 +13,7 @@ from .filesystem import (
     FilesystemSafetyError,
     _verify_private_directory,
     create_private_file_at,
+    create_private_directory_at,
     directory_identity,
     fsync_directory,
     open_existing_parent,
@@ -239,17 +240,22 @@ def prepare_transaction(
 
     transactions_fd = open_private_directory_at(proposal_dir_fd, "transactions", create=True)
     try:
-        transaction_fd = open_private_directory_at(transactions_fd, transaction_id, create=True)
+        transaction_fd = create_private_directory_at(transactions_fd, transaction_id)
     finally:
         os.close(transactions_fd)
     try:
         backups_fd = open_private_directory_at(transaction_fd, "backups", create=True)
-        prepared_fd = open_private_directory_at(transaction_fd, "prepared", create=True)
+        try:
+            prepared_fd = open_private_directory_at(transaction_fd, "prepared", create=True)
+        except BaseException:
+            os.close(backups_fd)
+            raise
         try:
             records: list[dict[str, object]] = []
             payloads: list[tuple[bytes | None, bytes | None]] = []
             seen: set[str] = set()
             for index, item in enumerate(operations, 1):
+                _validate_path(item.path)
                 if item.path.casefold() in seen:
                     raise PreparationError("Duplicate operation paths are not allowed")
                 seen.add(item.path.casefold())
