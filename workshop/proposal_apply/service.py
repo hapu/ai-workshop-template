@@ -5,7 +5,7 @@ import os
 import re
 from typing import TextIO
 
-from .approval import confirm_interactive, verify_approval_digest
+from .approval import ApprovalError, confirm_interactive, verify_approval_digest
 from .apply import ApplyError, ApplyResult, apply_prepared_transaction
 from .filesystem import (
     FilesystemSafetyError,
@@ -13,7 +13,7 @@ from .filesystem import (
     open_private_directory_at,
 )
 from .journal import JournalError, read_journal
-from .locking import transaction_locks
+from .locking import LockTimeoutError, transaction_locks
 from .transaction import (
     PreparationError,
     prepare_transaction,
@@ -185,7 +185,7 @@ def apply_proposal(
                 return result
             finally:
                 _close_all((state_fd, proposal_dir_fd, repository_root_fd))
-    except (ProposalError, PreparationError, ApplyError, FilesystemSafetyError) as exc:
+    except (ProposalError, PreparationError, ApplyError, ApprovalError, LockTimeoutError, FilesystemSafetyError) as exc:
         raise ProposalApplyServiceError(str(exc)) from exc
     finally:
         _close_all((initial_state_fd, initial_proposal_fd, initial_root_fd))
