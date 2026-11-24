@@ -23,7 +23,7 @@ _TOP_KEYS = {
     "repository_identity", "state", "operations", "journal_sha256",
 }
 _PROTECTED_PARTS = {".git", ".workshop", "secrets", "__pycache__", ".ssh", ".aws", ".azure"}
-_SECRET_PART = re.compile(r"(^\\.env(?:\\.|$)|\\.(?:pem|key|p12|pfx)$|(?:^|[._-])(credentials?|secrets?|token|api[-_]?key|private-key)(?:[._-]|$))", re.I)
+_SECRET_PART = re.compile(r"(^\.env(?:\.|$)|\.(?:pem|key|p12|pfx)$|(?:^|[._-])(credentials?|secrets?|token|api[-_]?key|private-key)(?:[._-]|$))", re.I)
 _OPERATION_KEYS = {
     "index", "op", "path", "expected_sha256", "original_sha256",
     "proposed_sha256", "original_mode", "original_device", "original_inode",
@@ -94,8 +94,9 @@ def validate_journal(value: object) -> dict[str, Any]:
     if not isinstance(identity, dict) or set(identity) != {"root", "device", "inode"}:
         raise JournalError("Repository identity is malformed")
     root = identity.get("root")
-    if not isinstance(root, str) or not root.startswith("/") or "\x00" in root:
-        raise JournalError("Repository root identity must be an absolute path")
+    if (not isinstance(root, str) or not root.startswith("/") or "\x00" in root
+            or os.path.normpath(root) != root):
+        raise JournalError("Repository root identity must be a canonical absolute path")
     if identity.get("device") is None or type(identity["device"]) is not int or identity["device"] < 0:
         raise JournalError("Repository device identity is invalid")
     if identity.get("inode") is None or type(identity["inode"]) is not int or identity["inode"] < 0:
@@ -159,7 +160,7 @@ def validate_journal(value: object) -> dict[str, Any]:
                     or proposed is not None or prepared is not None or prepared_size is not None):
                 raise JournalError("Delete operation digest or prepared-file metadata is invalid")
             if (type(operation.get("original_mode")) is not int
-                    or operation["original_mode"] < 0
+                    or not 0 <= operation["original_mode"] <= 0o7777
                     or type(operation.get("original_device")) is not int
                     or operation["original_device"] < 0
                     or type(operation.get("original_inode")) is not int
