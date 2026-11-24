@@ -290,6 +290,7 @@ def rollback_transaction(
                     temp_is_same = temporary is not None and (
                         temporary[1].st_dev == target_info.st_dev
                         and temporary[1].st_ino == target_info.st_ino
+                        and temporary[1].st_nlink == 2 and target_info.st_nlink == 2
                         and _same_identity(
                             temporary[1], operation.get("temporary_device"), operation.get("temporary_inode")
                         )
@@ -305,12 +306,17 @@ def rollback_transaction(
                     if quarantine is not None:
                         link_file_at(parent_fd, quarantine_name, target_name)
                         restored = _entry(parent_fd, target_name)
-                        if restored is None or (
+                        quarantine_after = _entry(parent_fd, quarantine_name)
+                        if (restored is None or quarantine_after is None or (
                             _sha256(restored[0]) != original_digest
                             or restored[1].st_dev != quarantine_info.st_dev
                             or restored[1].st_ino != quarantine_info.st_ino
                             or restored[1].st_nlink != 2
-                        ):
+                            or (quarantine_after[1].st_dev, quarantine_after[1].st_ino) != (
+                                restored[1].st_dev, restored[1].st_ino
+                            )
+                            or quarantine_after[1].st_nlink != 2
+                        )):
                             raise ApplyError(f"Could not verify quarantine restoration: {operation['path']}")
                         unlink_file_at(parent_fd, quarantine_name)
                         if temporary is not None:
