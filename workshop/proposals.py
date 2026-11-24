@@ -359,12 +359,17 @@ class ProposalStore:
                 "created_at", "task_id", "context_sha256", "bundle_sha256",
                 "operations", "previews", "status", "record_sha256",
             }
-            if not isinstance(record, dict) or set(record) != expected_fields:
+            legacy_fields = expected_fields - {"repository_identity"}
+            if not isinstance(record, dict) or record.get("format") != _FORMAT:
                 raise ProposalError("Staged proposal record fields are malformed")
-            if record.get("format") != _FORMAT or type(record.get("version")) is not int:
+            if type(record.get("version")) is not int:
                 raise ProposalError("Staged proposal format is invalid")
-            if record["version"] != _STAGED_RECORD_VERSION:
+            if record["version"] == 1:
+                if set(record) != legacy_fields:
+                    raise ProposalError("Legacy staged proposal record fields are malformed")
                 raise ProposalError("This staged proposal predates repository identity binding; restage it")
+            if record["version"] != _STAGED_RECORD_VERSION or set(record) != expected_fields:
+                raise ProposalError("Staged proposal record fields are malformed")
             if record.get("proposal_id") != proposal_id or record.get("status") != "staged_read_only":
                 raise ProposalError("Staged proposal identity or status is invalid")
             supplied_digest = record.get("record_sha256")
