@@ -122,7 +122,7 @@ def snapshot_operation(
     proposed_content: bytes | None,
 ) -> PreparedOperation:
     """Read and verify one operation's original bytes through descriptor-relative paths."""
-    if operation not in {"create", "update", "delete"}:
+    if not isinstance(operation, str) or operation not in {"create", "update", "delete"}:
         raise PreparationError("Unsupported proposal operation")
     parts = _validate_path(path)
     if operation in {"create", "update"}:
@@ -172,7 +172,7 @@ def snapshot_operation(
 def _operation_record(index: int, item: PreparedOperation) -> tuple[dict[str, object], bytes | None, bytes | None]:
     parts = _validate_path(item.path)
     del parts
-    if item.operation not in {"create", "update", "delete"}:
+    if not isinstance(item.operation, str) or item.operation not in {"create", "update", "delete"}:
         raise PreparationError("Unsupported prepared operation")
     original = item.original_content
     proposed = item.proposed_content
