@@ -67,6 +67,7 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
             proposal_id=self.proposal_id,
             proposal_sha256="b" * 64,
             repository=self.repository_record,
+            repository_root_fd=self.root_fd,
             operations=self._prepared_operations(),
             transaction_id="c" * 32,
         )
@@ -116,7 +117,7 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         )
         self.assertEqual(inventory["state"], "PREPARED")
         self.assertTrue(inventory["repository_identity_matches"])
-        self.assertTrue(inventory["safe_to_continue_inspection"])
+        self.assertTrue(inventory["private_artifacts_verified"])
         states = {item["path"]: item["state"] for item in inventory["targets"]}
         self.assertEqual(states["docs/note.txt"], "regular_file")
         self.assertEqual(states["docs/old.txt"], "regular_file")
@@ -136,7 +137,7 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
             )
             self.assertFalse(inventory["repository_identity_matches"])
             self.assertIsNone(inventory["targets"])
-            self.assertFalse(inventory["safe_to_continue_inspection"])
+            self.assertFalse(inventory["private_artifacts_verified"])
         finally:
             os.close(other_fd)
 
@@ -192,6 +193,30 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         self.assertEqual((self.repository / "docs/note.txt").read_bytes(), b"original note")
         self.assertFalse((self.repository / "docs/new.txt").exists())
 
+    def test_existing_transaction_id_cannot_be_reused(self) -> None:
+        self._prepare()
+        with self.assertRaises(FilesystemSafetyError):
+            prepare_transaction(
+                self.proposal_fd, proposal_id=self.proposal_id,
+                proposal_sha256="b" * 64, repository=self.repository_record,
+                repository_root_fd=self.root_fd, operations=self._prepared_operations(),
+                transaction_id="c" * 32,
+            )
+
+    def test_repository_identity_must_match_open_root_descriptor(self) -> None:
+        other = Path(self.temp.name) / "other-root"
+        other.mkdir()
+        other_fd = open_repository_root(other)
+        try:
+            with self.assertRaises(PreparationError):
+                prepare_transaction(
+                    self.proposal_fd, proposal_id=self.proposal_id,
+                    proposal_sha256="b" * 64, repository=self.repository_record,
+                    repository_root_fd=other_fd, operations=self._prepared_operations(),
+                    transaction_id="e" * 32,
+                )
+        finally:
+            os.close(other_fd)
     def test_snapshot_rejects_stale_hash_and_symlink_target(self) -> None:
         with self.assertRaises(PreparationError):
             snapshot_operation(self.root_fd, "update", "docs/note.txt", "0" * 64, b"new")
