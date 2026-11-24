@@ -61,6 +61,30 @@ class ProposalApplyServiceTests(unittest.TestCase):
         self.assertIn(self.digest, output.getvalue())
         self.assertIn("COMMITTED", output.getvalue())
 
+    def test_tampered_stored_diff_is_never_shown_as_approval_preview(self) -> None:
+        record_path = self.staged.directory / "proposal.json"
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record["previews"][0]["diff"] = "FORGED PREVIEW: no changes"
+        unsigned = {key: value for key, value in record.items() if key != "record_sha256"}
+        canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        record["record_sha256"] = hashlib.sha256(canonical).hexdigest()
+        record_path.write_text(
+            json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+            encoding="utf-8",
+        )
+        self.digest = record["record_sha256"]
+        self.confirmation = f"APPLY {self.staged.proposal_id} {self.digest}\n"
+        output = TTY()
+        result = apply_proposal(
+            self.store, self.staged.proposal_id, self.digest,
+            input_stream=TTY(self.confirmation), output_stream=output,
+        )
+        rendered = output.getvalue()
+        self.assertEqual(result.state, "COMMITTED")
+        self.assertNotIn("FORGED PREVIEW", rendered)
+        self.assertIn("old readme", rendered)
+        self.assertIn("new readme", rendered)
+
     def test_wrong_digest_fails_before_transaction_creation(self) -> None:
         with self.assertRaisesRegex(ProposalApplyServiceError, "does not match"):
             apply_proposal(
