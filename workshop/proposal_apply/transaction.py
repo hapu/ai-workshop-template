@@ -76,6 +76,8 @@ def _validate_path(path: str) -> tuple[str, ...]:
 def repository_identity(root_path: str | os.PathLike[str], root_fd: int) -> dict[str, object]:
     """Capture the canonical root path and the identity of its open descriptor."""
     absolute = os.path.abspath(os.fspath(root_path))
+    if not isinstance(absolute, str):
+        raise PreparationError("Repository root path must be text")
     identity = directory_identity(root_fd)
     verified_fd = open_repository_root(absolute)
     try:
@@ -189,7 +191,7 @@ def _operation_record(index: int, item: PreparedOperation) -> tuple[dict[str, ob
     else:
         if original is None or item.expected_sha256 != _sha256(original):
             raise PreparationError("Original bytes do not match the expected digest")
-        if (type(item.original_mode) is not int or item.original_mode < 0
+        if (type(item.original_mode) is not int or not 0 <= item.original_mode <= 0o7777
                 or type(item.original_device) is not int or item.original_device < 0
                 or type(item.original_inode) is not int or item.original_inode < 0):
             raise PreparationError("Existing target identity and mode are required")
@@ -237,7 +239,7 @@ def prepare_transaction(
     never modifies, creates, renames, or deletes repository target paths.
     """
     _verify_private_directory(proposal_dir_fd)
-    if not re.fullmatch(r"[0-9a-f]{32}", proposal_id):
+    if not isinstance(proposal_id, str) or not re.fullmatch(r"[0-9a-f]{32}", proposal_id):
         raise PreparationError("Invalid proposal ID")
     if not isinstance(proposal_sha256, str) or not _SHA256.fullmatch(proposal_sha256):
         raise PreparationError("Invalid proposal digest")
@@ -248,12 +250,18 @@ def prepare_transaction(
             or type(repository.get("inode")) is not int or repository["inode"] < 0):
         raise PreparationError("Repository identity is malformed")
     actual_identity = directory_identity(repository_root_fd)
-    if (actual_identity.device, actual_identity.inode) != (repository["device"], repository["inode"]):
-        raise PreparationError("Repository descriptor does not match the recorded repository identity")
+    verified_root_fd = open_repository_root(repository["root"])
+    try:
+        path_identity = directory_identity(verified_root_fd)
+    finally:
+        os.close(verified_root_fd)
+    if ((actual_identity.device, actual_identity.inode) != (repository["device"], repository["inode"])
+            or (path_identity.device, path_identity.inode) != (repository["device"], repository["inode"])):
+        raise PreparationError("Repository path or descriptor does not match the recorded identity")
     if not 1 <= len(operations) <= 32:
         raise PreparationError("Transaction must contain 1 to 32 operations")
     transaction_id = transaction_id or uuid.uuid4().hex
-    if not re.fullmatch(r"[0-9a-f]{32}", transaction_id):
+    if not isinstance(transaction_id, str) or not re.fullmatch(r"[0-9a-f]{32}", transaction_id):
         raise PreparationError("Invalid transaction ID")
 
     records: list[dict[str, object]] = []
