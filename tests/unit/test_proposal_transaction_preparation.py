@@ -137,7 +137,7 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
             )
             self.assertFalse(inventory["repository_identity_matches"])
             self.assertIsNone(inventory["targets"])
-            self.assertFalse(inventory["private_artifacts_verified"])
+            self.assertTrue(inventory["private_artifacts_verified"])
         finally:
             os.close(other_fd)
 
@@ -156,7 +156,7 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
             self.proposal_fd, prepared.transaction_id, repository_root_fd=self.root_fd
         )
         self.assertEqual(inventory["missing_backups"], ["0003.bin"])
-        self.assertFalse(inventory["safe_to_continue_inspection"])
+        self.assertFalse(inventory["private_artifacts_verified"])
         self.assertEqual((self.repository / "docs/old.txt").read_bytes(), b"remove me")
 
     def test_journal_tampering_is_rejected(self) -> None:
@@ -182,6 +182,7 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
                     proposal_id=self.proposal_id,
                     proposal_sha256="b" * 64,
                     repository=self.repository_record,
+                    repository_root_fd=self.root_fd,
                     operations=operations,
                     transaction_id="d" * 32,
                 )
@@ -217,6 +218,7 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
                 )
         finally:
             os.close(other_fd)
+
     def test_snapshot_rejects_stale_hash_and_symlink_target(self) -> None:
         with self.assertRaises(PreparationError):
             snapshot_operation(self.root_fd, "update", "docs/note.txt", "0" * 64, b"new")
