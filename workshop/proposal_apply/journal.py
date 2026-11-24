@@ -11,7 +11,7 @@ from typing import Any
 from .filesystem import read_private_file_at, replace_private_file_at
 
 _FORMAT = "ai-workshop-proposal-transaction"
-_VERSION = 1
+_VERSION = 2
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _TRANSACTION_ID = re.compile(r"^[0-9a-f]{32}$")
 _STATES = {
@@ -29,6 +29,11 @@ _OPERATION_KEYS = {
     "proposed_sha256", "original_mode", "original_device", "original_inode",
     "original_size", "backup_file", "prepared_file", "backup_size", "prepared_size",
 }
+_OPERATION_PROGRESS_KEYS = {
+    "quarantine_name", "temporary_name", "status", "applied_device",
+    "applied_inode", "quarantine_device", "quarantine_inode",
+}
+_PROGRESS_STATES = {"PENDING", "TEMP_READY", "QUARANTINED", "TARGET_REMOVED", "INSTALLED", "DONE"}
 
 
 class JournalError(ValueError):
@@ -79,7 +84,7 @@ def validate_journal(value: object) -> dict[str, Any]:
     """Validate the complete versioned journal schema without trusting its digest."""
     if not isinstance(value, dict) or set(value) != _TOP_KEYS:
         raise JournalError("Journal fields do not match the supported schema")
-    if value.get("format") != _FORMAT or type(value.get("version")) is not int or value["version"] != _VERSION:
+    if value.get("format") != _FORMAT or type(value.get("version")) is not int or value["version"] not in {1, _VERSION}:
         raise JournalError("Unsupported transaction journal format or version")
     if not isinstance(value.get("transaction_id"), str) or not _TRANSACTION_ID.fullmatch(value["transaction_id"]):
         raise JournalError("Invalid transaction ID in journal")
@@ -107,7 +112,8 @@ def validate_journal(value: object) -> dict[str, Any]:
         raise JournalError("Journal must contain between 1 and 32 operations")
     seen: set[str] = set()
     for expected_index, operation in enumerate(operations, 1):
-        if not isinstance(operation, dict) or set(operation) != _OPERATION_KEYS:
+        expected_operation_keys = _OPERATION_KEYS | (_OPERATION_PROGRESS_KEYS if value["version"] == 2 else set())
+        if not isinstance(operation, dict) or set(operation) != expected_operation_keys:
             raise JournalError("Journal operation fields are malformed")
         if type(operation.get("index")) is not int or operation["index"] != expected_index:
             raise JournalError("Journal operation indexes must be sequential")
