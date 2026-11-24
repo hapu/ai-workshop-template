@@ -18,6 +18,8 @@ from workshop.proposal_apply.journal import JournalError, read_journal, seal_jou
 from workshop.proposal_apply.recovery import RecoveryInventoryError, inventory_transaction
 from workshop.proposal_apply.transaction import (
     PreparationError,
+    OperationRequest,
+    prepare_proposal_transaction,
     prepare_transaction,
     repository_identity,
     snapshot_operation,
@@ -41,8 +43,16 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         self.addCleanup(os.close, self.root_fd)
 
         self.proposal_id = "a" * 32
-        self.proposal_dir = base / "state" / "proposals" / self.proposal_id
-        self.proposal_dir.mkdir(parents=True)
+        self.state_dir = base / "state"
+        self.state_dir.mkdir(mode=0o700)
+        self.state_dir.chmod(0o700)
+        self.state_fd = os.open(self.state_dir, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(os.close, self.state_fd)
+        proposals_dir = self.state_dir / "proposals"
+        proposals_dir.mkdir(mode=0o700)
+        proposals_dir.chmod(0o700)
+        self.proposal_dir = proposals_dir / self.proposal_id
+        self.proposal_dir.mkdir(mode=0o700)
         self.proposal_dir.chmod(0o700)
         self.proposal_fd = os.open(self.proposal_dir, os.O_RDONLY | os.O_DIRECTORY)
         self.addCleanup(os.close, self.proposal_fd)
@@ -61,14 +71,22 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
             ),
         )
 
+    def _requests(self):
+        return (
+            OperationRequest("update", "docs/note.txt", digest(b"original note"), b"updated note"),
+            OperationRequest("create", "docs/new.txt", None, b"new file"),
+            OperationRequest("delete", "docs/old.txt", digest(b"remove me"), None),
+        )
+
     def _prepare(self):
-        return prepare_transaction(
+        return prepare_proposal_transaction(
+            self.state_fd,
             self.proposal_fd,
+            repository_path=self.repository,
+            repository_root_fd=self.root_fd,
             proposal_id=self.proposal_id,
             proposal_sha256="b" * 64,
-            repository=self.repository_record,
-            repository_root_fd=self.root_fd,
-            operations=self._prepared_operations(),
+            operations=self._requests(),
             transaction_id="c" * 32,
         )
 
@@ -86,6 +104,8 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         }
         prepared = self._prepare()
         self.assertEqual(prepared.state, "PREPARED")
+        self.assertTrue((self.state_dir / f"proposal-{self.proposal_id}.lock").exists())
+        self.assertTrue((self.state_dir / "repository.lock").exists())
         self.assertEqual((self.repository / "docs/note.txt").read_bytes(), before["docs/note.txt"])
         self.assertEqual((self.repository / "docs/old.txt").read_bytes(), before["docs/old.txt"])
         self.assertFalse((self.repository / "docs/new.txt").exists())
@@ -228,17 +248,17 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         self.assertFalse(inventory["private_artifacts_verified"])
 
     def test_failed_preparation_leaves_a_preparing_journal_and_targets_unchanged(self) -> None:
-        operations = self._prepared_operations()
         with patch("workshop.proposal_apply.transaction.create_private_file_at",
                    side_effect=OSError("simulated private storage failure")):
             with self.assertRaises(OSError):
-                prepare_transaction(
+                prepare_proposal_transaction(
+                    self.state_fd,
                     self.proposal_fd,
+                    repository_path=self.repository,
+                    repository_root_fd=self.root_fd,
                     proposal_id=self.proposal_id,
                     proposal_sha256="b" * 64,
-                    repository=self.repository_record,
-                    repository_root_fd=self.root_fd,
-                    operations=operations,
+                    operations=self._requests(),
                     transaction_id="d" * 32,
                 )
         transaction_fd = self._open_transaction("d" * 32)
