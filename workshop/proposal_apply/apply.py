@@ -393,7 +393,11 @@ def apply_prepared_transaction(
             raise ApplyError("Repository identity changed before application")
 
         backups_fd = open_private_directory_at(transaction_fd, "backups")
-        prepared_fd = open_private_directory_at(transaction_fd, "prepared")
+        try:
+            prepared_fd = open_private_directory_at(transaction_fd, "prepared")
+        except BaseException:
+            os.close(backups_fd)
+            raise
         try:
             opened = _preflight_targets(journal, repository_root_fd)
             try:
