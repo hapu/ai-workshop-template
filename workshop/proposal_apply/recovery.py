@@ -132,7 +132,7 @@ def _sibling_inventory(
         "links": info.st_nlink,
         "matches_expected": (
             expected_sha256 is not None and _sha256(data) == expected_sha256
-            and (expected_device is None or identity_matches)
+            and expected_device is not None and expected_inode is not None and identity_matches
         ),
     }
 
