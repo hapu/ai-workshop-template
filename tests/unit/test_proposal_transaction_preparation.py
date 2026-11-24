@@ -314,6 +314,33 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         with self.assertRaises(PreparationError):
             snapshot_operation(self.root_fd, "update", "docs/linked.txt", digest(b"original note"), b"new")
 
+    def test_snapshot_rejects_existing_destination_missing_parent_and_protected_path(self) -> None:
+        with self.assertRaises(PreparationError):
+            snapshot_operation(self.root_fd, "create", "docs/note.txt", None, b"duplicate")
+        with self.assertRaises(PreparationError):
+            snapshot_operation(self.root_fd, "create", "missing/new.txt", None, b"new")
+        with self.assertRaises(PreparationError):
+            snapshot_operation(self.root_fd, "create", ".git/config", None, b"unsafe")
+
+    def test_snapshot_rejects_hard_linked_target(self) -> None:
+        os.link(self.repository / "docs/note.txt", self.repository / "docs/alias.txt")
+        with self.assertRaises(PreparationError):
+            snapshot_operation(
+                self.root_fd, "update", "docs/alias.txt", digest(b"original note"), b"new"
+            )
+
+    def test_duplicate_paths_are_rejected_before_transaction_creation(self) -> None:
+        requests = (
+            OperationRequest("create", "docs/new.txt", None, b"first"),
+            OperationRequest("create", "docs/NEW.txt", None, b"second"),
+        )
+        with self.assertRaises(PreparationError):
+            prepare_proposal_transaction(
+                self.state_fd, self.proposal_fd, repository_path=self.repository,
+                repository_root_fd=self.root_fd, proposal_id=self.proposal_id,
+                proposal_sha256="b" * 64, operations=requests, transaction_id="9" * 32,
+            )
+        self.assertFalse((self.proposal_dir / "transactions" / ("9" * 32)).exists())
     def test_directory_fsync_failure_is_explicit(self) -> None:
         with patch("workshop.proposal_apply.filesystem.os.fsync", side_effect=OSError(22, "unsupported")):
             with self.assertRaises(FilesystemSafetyError):
