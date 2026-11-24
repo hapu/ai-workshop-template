@@ -244,8 +244,9 @@ def prepare_transaction(
 ) -> PreparedTransaction:
     """Persist private backups, prepared payloads, and a PREPARED journal.
 
-    This function only writes below the private proposal-state directory. It
-    never modifies, creates, renames, or deletes repository target paths.
+    This low-level function assumes the caller already holds both transaction
+    locks. It writes only below private proposal state and never modifies,
+    creates, renames, or deletes repository target paths.
     """
     _verify_private_directory(proposal_dir_fd)
     if not isinstance(proposal_id, str) or not re.fullmatch(r"[0-9a-f]{32}", proposal_id):
@@ -348,8 +349,10 @@ def prepare_proposal_transaction(
     """
     if not isinstance(proposal_id, str) or not re.fullmatch(r"[0-9a-f]{32}", proposal_id):
         raise PreparationError("Invalid proposal ID")
-    if not 1 <= len(operations) <= 32:
-        raise PreparationError("Transaction must contain 1 to 32 operations")
+    if not isinstance(proposal_sha256, str) or not _SHA256.fullmatch(proposal_sha256):
+        raise PreparationError("Invalid proposal digest")
+    if not 1 <= len(operations) <= 32 or any(not isinstance(item, OperationRequest) for item in operations):
+        raise PreparationError("Transaction must contain 1 to 32 validated operation requests")
     snapshots: list[PreparedOperation] = []
     with transaction_locks(
         state_dir_fd, f"proposal-{proposal_id}.lock", timeout=timeout
