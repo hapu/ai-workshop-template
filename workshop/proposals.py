@@ -17,8 +17,17 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from .proposal_apply.filesystem import (
+    _verify_private_directory,
+    directory_identity,
+    open_private_directory_at,
+    open_repository_root,
+    read_private_file_at,
+)
+
 _FORMAT = "ai-workshop-file-proposal"
-_VERSION = 1
+_BUNDLE_VERSION = 1
+_STAGED_RECORD_VERSION = 2
 _MAX_BUNDLE_BYTES = 256 * 1024
 _MAX_OPERATIONS = 32
 _MAX_FILE_BYTES = 64 * 1024
@@ -128,7 +137,7 @@ def parse_proposal(raw: bytes | str) -> tuple[dict[str, Any], tuple[ProposalOper
     if (not isinstance(payload, dict) or not required.issubset(payload)
             or set(payload) - required - optional):
         raise ProposalError("Proposal is missing required fields or contains unsupported fields")
-    if payload["format"] != _FORMAT or type(payload["version"]) is not int or payload["version"] != _VERSION:
+    if payload["format"] != _FORMAT or type(payload["version"]) is not int or payload["version"] != _BUNDLE_VERSION:
         raise ProposalError("Unsupported proposal format or version")
     for field in ("source", "created_at"):
         value = payload[field]
@@ -257,17 +266,26 @@ class ProposalStore:
             ))
             previews.append({"path": operation.path, "operation": operation.operation, "diff": diff})
 
+        self.home.mkdir(parents=True, exist_ok=True)
         self.proposals_dir.mkdir(parents=True, exist_ok=True)
-        if self.proposals_dir.is_symlink():
-            raise ProposalError("Proposal staging directory must not be a symlink")
+        if self.home.is_symlink() or self.proposals_dir.is_symlink():
+            raise ProposalError("Private proposal state must not contain symlink directories")
         try:
+            os.chmod(self.home, 0o700)
             os.chmod(self.proposals_dir, 0o700)
         except OSError as exc:
             raise ProposalError("Cannot secure the private proposal staging directory") from exc
+        root_info = self.repository.stat()
+        repository_identity = {
+            "root": str(self.repository),
+            "device": root_info.st_dev,
+            "inode": root_info.st_ino,
+        }
         proposal_id = uuid.uuid4().hex
         record = {
             "format": _FORMAT,
-            "version": _VERSION,
+            "version": _STAGED_RECORD_VERSION,
+            "repository_identity": repository_identity,
             "proposal_id": proposal_id,
             "source": payload["source"],
             "created_at": payload["created_at"],
@@ -284,6 +302,11 @@ class ProposalStore:
         }
         record["record_sha256"] = _record_digest(record)
         directory = self.proposals_dir / proposal_id
+        try:
+            directory.mkdir(mode=0o700)
+            os.chmod(directory, 0o700)
+        except OSError as exc:
+            raise ProposalError("Cannot create a unique private proposal directory") from exc
         _atomic_private_write(directory / "proposal.json", _canonical_json(record))
         return StagedProposal(proposal_id, directory, operations)
 
@@ -300,8 +323,21 @@ class ProposalStore:
             raise ProposalError("Staged proposal not found or unreadable") from exc
         if not isinstance(record, dict) or record.get("format") != _FORMAT:
             raise ProposalError("Staged proposal format is invalid")
-        if type(record.get("version")) is not int or record["version"] != _VERSION:
+        if type(record.get("version")) is not int or record["version"] not in {1, _STAGED_RECORD_VERSION}:
             raise ProposalError("Staged proposal version is invalid")
+        if record["version"] == _STAGED_RECORD_VERSION:
+            identity = record.get("repository_identity")
+            try:
+                root_info = self.repository.stat()
+            except OSError as exc:
+                raise ProposalError("Repository root cannot be revalidated") from exc
+            if (not isinstance(identity, dict) or set(identity) != {"root", "device", "inode"}
+                    or identity.get("root") != str(self.repository)
+                    or type(identity.get("device")) is not int
+                    or type(identity.get("inode")) is not int
+                    or identity["device"] != root_info.st_dev
+                    or identity["inode"] != root_info.st_ino):
+                raise ProposalError("Staged proposal belongs to a different repository identity; restage it")
         if record.get("proposal_id") != proposal_id:
             raise ProposalError("Staged proposal identity does not match its directory")
         supplied_digest = record.get("record_sha256")
@@ -316,7 +352,7 @@ class ProposalStore:
             raise ProposalError("Staged proposal contents are malformed")
         _, validated_operations = parse_proposal(_canonical_json({
             "format": _FORMAT,
-            "version": _VERSION,
+            "version": _BUNDLE_VERSION,
             "source": record.get("source"),
             "created_at": record.get("created_at"),
             **({"task_id": record["task_id"]} if record.get("task_id") is not None else {}),
