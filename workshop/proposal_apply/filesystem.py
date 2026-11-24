@@ -90,8 +90,8 @@ def directory_identity(descriptor: int) -> DirectoryIdentity:
 
 
 def open_directory_at(parent_fd: int, name: str) -> int:
-    require_posix_support()
     """Open one existing child directory without following a symlink."""
+    require_posix_support()
     name = _component(name)
     try:
         before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
@@ -118,12 +118,12 @@ def open_directory_at(parent_fd: int, name: str) -> int:
 
 
 def open_existing_parent(root_fd: int, components: Iterable[str]) -> int:
-    require_posix_support()
     """Traverse existing directory components and return the final descriptor.
 
     The caller owns the returned descriptor. An empty component sequence
     returns a duplicate of root_fd, also owned by the caller.
     """
+    require_posix_support()
     current = os.dup(root_fd)
     try:
         for item in components:
@@ -136,9 +136,9 @@ def open_existing_parent(root_fd: int, components: Iterable[str]) -> int:
         raise
 
 
-def open_regular_file_at(parent_fd: int, name: str) -> int:
+def open_regular_file_at(parent_fd: int, name: str, *, allow_hardlinks: bool = False) -> int:
+    """Open an existing regular file read-only, without following links."""
     require_posix_support()
-    """Open an existing single-link regular file read-only, without following links."""
     name = _component(name)
     try:
         before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
