@@ -3,10 +3,10 @@
 Prioritized template-maintenance backlog. Keep exactly one active task under **Now**. A checked item belongs in **Completed**, not in an active queue.
 
 ## Now
-- [ ] Review draft PR #24 (stage 2) and verify all CI checks on Python 3.10–3.13. Keep target application and recovery actions out of this stage.
+- [ ] Implement stage 3 of proposal application: interactive digest-bound approval, per-file no-overwrite application, verification, journaled rollback, and explicit recovery confirmation. Keep adversarial/crash tests as a separate stage.
 
 ## Next
-- [ ] After stage 2 is accepted, implement stage 3: interactive digest-bound approval, target application, verification, and rollback under the approved design.
+- [ ] Add crash-injection and adversarial race tests for every journal transition, target operation, and rollback step.
 - [ ] Add manual fallback instructions for when browser/API quotas are exhausted.
 - [ ] Add provider-specific quota refresh for remaining dimensions only where safe official APIs expose them.
 - [ ] Verify actual OpenRouter account/project quotas, external usage, region, model eligibility, and billing safeguards before adding any enabled model policy.
@@ -33,5 +33,6 @@ Prioritized template-maintenance backlog. Keep exactly one active task under **N
 - [x] Safe proposal intake: bounded versioned bundles, path/protected-file checks, expected hashes, private staging, integrity checks, stale-preview rejection, and terminal-safe read-only diffs.
 - [x] Optional task ID and context-bundle SHA-256 provenance for proposals.
 - [x] Approve the proposal-application safety design with POSIX, rollback, existing-parent-only, and interactive-approval decisions.
-- [x] Stage 1 POSIX filesystem primitives and advisory locks; merged by PR #23 into the design branch.
+- [x] Stage 1 POSIX filesystem primitives and advisory locks; merged by PR #23.
+- [x] Stage 2 canonical journal, durable private backup/prepared payloads, lock-held snapshots, and read-only recovery inventory; merged by PR #24.
 - [x] Protected main branch, required Python 3.10–3.13 CI, and squash-only PR workflow.
