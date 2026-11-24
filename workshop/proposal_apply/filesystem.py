@@ -32,8 +32,8 @@ def require_posix_support() -> None:
         raise FilesystemSafetyError("Required POSIX open flags are unavailable")
     if any(function not in os.supports_dir_fd for function in _REQUIRED_DIR_FD_FUNCTIONS):
         raise FilesystemSafetyError("Required descriptor-relative filesystem operations are unavailable")
-    if os.stat not in os.supports_follow_symlinks:
-        raise FilesystemSafetyError("No-follow stat support is unavailable")
+    if os.stat not in os.supports_follow_symlinks or os.link not in os.supports_follow_symlinks:
+        raise FilesystemSafetyError("Required no-follow stat/link support is unavailable")
     if os.listdir not in os.supports_fd or not all(hasattr(os, name) for name in ("fchmod", "fsync")):
         raise FilesystemSafetyError("Required private transaction storage primitives are unavailable")
     try:
@@ -146,7 +146,7 @@ def open_regular_file_at(parent_fd: int, name: str) -> int:
         raise FilesystemSafetyError(f"Cannot inspect target file safely: {name}") from exc
     if not stat.S_ISREG(before.st_mode):
         raise FilesystemSafetyError(f"Target is not a regular file: {name}")
-    if before.st_nlink != 1:
+    if before.st_nlink != 1 and not allow_hardlinks:
         raise FilesystemSafetyError(f"Hard-linked targets are not supported: {name}")
 
     try:
@@ -162,7 +162,7 @@ def open_regular_file_at(parent_fd: int, name: str) -> int:
         if (not stat.S_ISREG(info.st_mode) or info.st_dev != before.st_dev
                 or info.st_ino != before.st_ino):
             raise FilesystemSafetyError(f"Target changed while it was being opened: {name}")
-        if info.st_nlink != 1:
+        if info.st_nlink != 1 and not allow_hardlinks:
             raise FilesystemSafetyError(f"Hard-linked targets are not supported: {name}")
         return descriptor
     except BaseException:
@@ -338,3 +338,102 @@ def replace_private_file_at(directory_fd: int, name: str, content: bytes) -> Non
         except OSError:
             pass
         raise
+
+
+def read_regular_file_at(
+    parent_fd: int,
+    name: str,
+    *,
+    allow_hardlinks: bool = False,
+    max_bytes: int = 65536,
+) -> tuple[bytes, os.stat_result]:
+    """Read a bounded regular file through a no-follow descriptor."""
+    descriptor = open_regular_file_at(parent_fd, name, allow_hardlinks=allow_hardlinks)
+    try:
+        before = os.fstat(descriptor)
+        if before.st_size > max_bytes:
+            raise FilesystemSafetyError(f"File exceeds the {max_bytes}-byte limit: {name}")
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(descriptor, min(65536, max_bytes + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > max_bytes:
+                raise FilesystemSafetyError(f"File exceeds the {max_bytes}-byte limit: {name}")
+        after = os.fstat(descriptor)
+        stable_fields = (
+            "st_dev", "st_ino", "st_mode", "st_uid", "st_gid",
+            "st_size", "st_mtime_ns", "st_ctime_ns", "st_nlink",
+        )
+        if any(getattr(before, field) != getattr(after, field) for field in stable_fields):
+            raise FilesystemSafetyError(f"File changed while being read: {name}")
+        data = b"".join(chunks)
+        if len(data) != after.st_size:
+            raise FilesystemSafetyError(f"File size changed while being read: {name}")
+        return data, after
+    finally:
+        os.close(descriptor)
+
+
+def create_sibling_file_at(parent_fd: int, name: str, content: bytes, mode: int) -> os.stat_result:
+    """Create and durably flush a same-directory regular file without replacement."""
+    require_posix_support()
+    name = _component(name)
+    if not isinstance(content, bytes) or len(content) > 65536:
+        raise FilesystemSafetyError("Sibling file content must be bytes up to 64 KiB")
+    if type(mode) is not int or not 0 <= mode <= 0o777:
+        raise FilesystemSafetyError("Sibling file mode is invalid")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        descriptor = os.open(name, flags, 0o600, dir_fd=parent_fd)
+    except OSError as exc:
+        raise FilesystemSafetyError(f"Cannot exclusively create sibling file: {name}") from exc
+    try:
+        os.fchmod(descriptor, mode)
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1:
+            raise FilesystemSafetyError("Created sibling file failed identity checks")
+        _write_all(descriptor, content)
+        os.fsync(descriptor)
+        result = os.fstat(descriptor)
+    except BaseException:
+        try:
+            os.unlink(name, dir_fd=parent_fd)
+            fsync_directory(parent_fd)
+        except (OSError, FilesystemSafetyError):
+            pass
+        raise
+    finally:
+        os.close(descriptor)
+    fsync_directory(parent_fd)
+    return result
+
+
+def link_file_at(parent_fd: int, source_name: str, destination_name: str) -> None:
+    """Create a same-directory hard link atomically without overwriting a name."""
+    require_posix_support()
+    source_name = _component(source_name)
+    destination_name = _component(destination_name)
+    try:
+        os.link(
+            source_name, destination_name,
+            src_dir_fd=parent_fd, dst_dir_fd=parent_fd,
+            follow_symlinks=False,
+        )
+        fsync_directory(parent_fd)
+    except OSError as exc:
+        raise FilesystemSafetyError("No-overwrite hard-link installation failed") from exc
+
+
+def unlink_file_at(parent_fd: int, name: str) -> None:
+    """Unlink one entry by descriptor and flush its parent directory."""
+    require_posix_support()
+    name = _component(name)
+    try:
+        os.unlink(name, dir_fd=parent_fd)
+        fsync_directory(parent_fd)
+    except OSError as exc:
+        raise FilesystemSafetyError(f"Cannot safely unlink sibling entry: {name}") from exc
