@@ -109,6 +109,16 @@ def _target_inventory(repository_root_fd: int, operation: dict[str, Any]) -> dic
         os.close(parent_fd)
 
 
+def _open_optional_private_directory(transaction_fd: int, name: str) -> int | None:
+    try:
+        info = os.stat(name, dir_fd=transaction_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISDIR(info.st_mode):
+        raise RecoveryInventoryError(f"Transaction entry is not a real directory: {name}")
+    return open_private_directory_at(transaction_fd, name)
+
+
 def inventory_transaction(
     proposal_dir_fd: int,
     transaction_id: str,
@@ -150,21 +160,31 @@ def inventory_transaction(
                     operation["proposed_sha256"], operation["prepared_size"]
                 )
 
-        backups_fd = open_private_directory_at(transaction_fd, "backups")
-        prepared_fd = open_private_directory_at(transaction_fd, "prepared")
+        backups_fd = _open_optional_private_directory(transaction_fd, "backups")
+        prepared_fd = _open_optional_private_directory(transaction_fd, "prepared")
         try:
-            backups, missing_backups, unexpected_backups = _private_payload_inventory(
-                backups_fd, expected_backups
-            )
-            prepared, missing_prepared, unexpected_prepared = _private_payload_inventory(
-                prepared_fd, expected_prepared
-            )
+            if backups_fd is None:
+                backups, missing_backups, unexpected_backups = [], sorted(expected_backups), []
+            else:
+                backups, missing_backups, unexpected_backups = _private_payload_inventory(
+                    backups_fd, expected_backups
+                )
+            if prepared_fd is None:
+                prepared, missing_prepared, unexpected_prepared = [], sorted(expected_prepared), []
+            else:
+                prepared, missing_prepared, unexpected_prepared = _private_payload_inventory(
+                    prepared_fd, expected_prepared
+                )
         finally:
-            os.close(backups_fd)
-            os.close(prepared_fd)
+            if backups_fd is not None:
+                os.close(backups_fd)
+            if prepared_fd is not None:
+                os.close(prepared_fd)
 
         expected_root_entries = {"journal.json", "backups", "prepared"}
-        unexpected_root_entries = sorted(set(os.listdir(transaction_fd)) - expected_root_entries)
+        actual_root_entries = set(os.listdir(transaction_fd))
+        missing_transaction_entries = sorted(expected_root_entries - actual_root_entries)
+        unexpected_root_entries = sorted(actual_root_entries - expected_root_entries)
         identity_matches: bool | None = None
         target_states: list[dict[str, Any]] | None = None
         if repository_root_fd is not None:
@@ -194,11 +214,12 @@ def inventory_transaction(
             "unexpected_backups": unexpected_backups,
             "unexpected_prepared": unexpected_prepared,
             "unexpected_transaction_entries": unexpected_root_entries,
+            "missing_transaction_entries": missing_transaction_entries,
             "targets": target_states,
             "private_artifacts_verified": (
                 not missing_backups and not missing_prepared
                 and not unexpected_backups and not unexpected_prepared
-                and not unexpected_root_entries
+                and not unexpected_root_entries and not missing_transaction_entries
                 and all(item.get("matches_journal", False) for item in backups + prepared)
             ),
         }
