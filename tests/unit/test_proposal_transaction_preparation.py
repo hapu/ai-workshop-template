@@ -122,6 +122,10 @@ class ProposalTransactionPreparationTests(unittest.TestCase):
         self.assertEqual(states["docs/note.txt"], "regular_file")
         self.assertEqual(states["docs/old.txt"], "regular_file")
         self.assertEqual(states["docs/new.txt"], "absent")
+        target_states = {item["path"]: item for item in inventory["targets"]}
+        self.assertTrue(target_states["docs/note.txt"]["matches_known_transaction_state"])
+        self.assertTrue(target_states["docs/new.txt"]["matches_original_state"])
+        self.assertTrue(target_states["docs/old.txt"]["matches_original_identity"])
         self.assertEqual((self.repository / "docs/note.txt").read_bytes(), b"original note")
         self.assertEqual((self.repository / "docs/old.txt").read_bytes(), b"remove me")
         self.assertFalse((self.repository / "docs/new.txt").exists())
