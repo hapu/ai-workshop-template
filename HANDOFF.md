@@ -2,15 +2,13 @@
 
 Keep under 300 words. Refresh at the end of each work session.
 
-- **Date:** 2026-11-23
+- **Date:** 2026-11-24
 - **Repository:** `hapu/ai-workshop-template` (master template; GPL-3.0).
-- **Stable branch:** `main` remains unchanged; proposal-safety work is on the approved design branch and separate review branches.
-- **CI:** Stage 1 passed Python 3.10–3.13 (run #83). Stage 2 passed all checks on Python 3.10–3.13 (run #105). Stage 3 CI must be rerun against the latest branch head before review.
-- **Implemented:** Standard-library task/checkpoint persistence, bounded context and handoffs, quota ledger/reconciliation, gated OpenRouter adapter, and untrusted proposal import with private staging and read-only preview.
-- **Proposal safety design:** Approved. Decisions: POSIX, rollback recovery, existing parent directories only, and interactive digest-bound approval. See `docs/PROPOSAL_APPLICATION_DESIGN.md`.
-- **Stage 1 merged:** POSIX filesystem primitives and advisory locks merged by PR #23 into the design branch; squash commit `8f8e4c5`.
-- **Stage 2 merged:** Canonical journals, private backups/prepared payloads, lock-held read-only snapshots, and recovery inventory merged by PR #24; squash commit `f006df1`.
-- **Stage 3 implemented in draft PR #25:** Version-2 repository-bound staged records, interactive digest approval, recomputed diffs, journaled create/update/delete application, automatic rollback, explicit journal-digest-bound recovery, and CLI `proposal apply/recover`. It is not merged.
-- **Next:** Complete stage-4 crash-injection, adversarial path/race, rollback idempotency, and recovery tests; rerun CI on the exact head; review PR #25. Do not merge before stage-4 acceptance.
-- **Safety boundary:** No apply/recover command is on `main`. The feature branch does not run shell commands, providers, package managers, or Git write operations.
-- **Tomorrow's start:** Check `git status --short --branch`; read this file, `TODO.md`, `docs/ROADMAP.md`, `docs/SECURITY.md`, and the proposal safety design. Continue on the stage-3 feature branch, never directly on `main`.
+- **Stable branch:** `main`; reviewed head: `574ef89c70b9d8d4c307efac76af9a66aa9bf4eb`. Work on feature branches and use PRs.
+- **CI:** Main promotion PR #26 passed the required CI workflow on Python 3.10–3.13 (run [#158](https://github.com/hapu/ai-workshop-template/actions/runs/45327477908)).
+- **Implemented:** Standard-library task/checkpoint persistence, bounded project context and handoffs, provider policy/quota ledger, gated OpenRouter adapter, proposal staging/preview, and POSIX proposal apply/recovery.
+- **Proposal safety:** Apply requires a full staged-record SHA-256 and exact interactive confirmation. Recovery requires a separate journal-digest-bound confirmation. Interrupted transactions roll back by default; committed transactions allow cleanup only. Multi-file application is recoverable, not globally atomic to external observers.
+- **Safety boundaries:** No proposal content is executed. Apply/recovery do not invoke providers, install packages, run shell commands, or perform Git writes. The provider catalog remains empty by default.
+- **Next task:** Validate the template on the SAT XML Manager pilot. Record setup friction, missing context, handoff gaps, and any proposal/recovery issues before expanding automation.
+- **Local checks:** `python3 -m unittest discover -s tests/unit -v`; `bash scripts/check-words.sh`; `bash tests/smoke.sh`.
+- **Start:** `git switch main && git pull --ff-only`; check `git status --short --branch`; create a fresh feature branch. Do not work directly on `main`.

@@ -1,6 +1,6 @@
 # Proposal Application Safety Design
 
-**Status:** Approved; stages 1 and 2 merged into the design branch; stage 3 implemented in draft PR #25; stage 4 crash/adversarial validation pending  
+**Status:** Implemented on `main` by PR #26; crash-injection and adversarial tests passed CI on Python 3.10–3.13  
 **Decision date:** 2026-11-23  
 **Scope:** Local application of staged browser-assistant file proposals  
 **Selected platform:** POSIX  
@@ -8,20 +8,21 @@
 **Parent-directory policy:** Existing directories only  
 **Approval policy:** Interactive, digest-bound confirmation
 
-## 1. Purpose and non-goals
+## 1. Purpose, implementation status, and non-goals
 
-This document specifies a safety boundary for a future command that applies a previously staged proposal to a local working tree. It is a design contract, not implementation authorization.
+This document records the approved safety contract and the implementation now available in `main`. The implementation was promoted by [PR #26](https://github.com/hapu/ai-workshop-template/pull/26); its required CI workflow passed on Python 3.10–3.13 in [run #158](https://github.com/hapu/ai-workshop-template/actions/runs/45327477908).
 
-The existing proposal workflow remains unchanged:
+The workflow remains separated into distinct stages:
 
 - Import parses an untrusted, bounded JSON bundle.
-- Staging validates proposal structure, repository-relative paths, protected paths, and expected hashes.
-- Preview rechecks current preconditions and displays a read-only diff.
-- Neither import nor preview writes to repository targets or executes proposal content.
+- Staging validates proposal structure, repository-relative paths, protected paths, expected hashes, and repository identity.
+- Preview rechecks current preconditions and recomputes a read-only diff from the live snapshot.
+- Apply requires a full staged-record digest and exact interactive confirmation, then performs journaled file operations with verification and rollback.
+- Recovery inventories an interrupted transaction and requires a separate exact confirmation bound to the journal digest.
 
-The apply command is separate from import and preview. This subsystem must not execute shell commands, invoke providers, install packages, or perform Git commits, pushes, pull requests, or merges. Those actions remain separate workflows and approvals.
+The subsystem does not execute shell commands, invoke providers, install packages, or perform Git commits, pushes, pull requests, or merges. Those actions remain separate workflows and approvals.
 
-This design provides recoverable multi-file application, not instantaneous multi-file atomic visibility to arbitrary external readers.
+The implementation provides recoverable multi-file application, not instantaneous multi-file atomic visibility to arbitrary external readers.
 
 ## 2. Accepted decisions
 
@@ -341,14 +342,16 @@ Acceptance criteria:
 
 The test suite must run on each supported Python version in CI. The implementation must not claim stronger guarantees than the tested OS/filesystem combinations provide.
 
-## 14. Implementation gates
+## 14. Implementation history and acceptance
 
-Implementation may begin only after this document has been reviewed and approved. Work should then proceed in separate reviewable stages:
+The design was approved on 2026-11-23 with the decisions recorded in section 2. Implementation proceeded in separately reviewable stages:
 
-1. POSIX filesystem primitives and lock tests; no proposal application. (Merged to the design branch by PR #23.)
-2. Journal format, backup preparation, and recovery inventory; no target writes. (Merged to the design branch by PR #24.)
-3. Approval-gated transaction application, verification, rollback, and explicit recovery commands. (Draft PR #25; review pending.)
-4. Adversarial race, concurrency, and crash-injection tests. (Not yet complete.)
-5. Documentation updates and full repository checks.
+1. POSIX filesystem primitives and advisory-lock tests.
+2. Canonical journals, private backup/prepared-file creation, lock-held snapshots, and recovery inventory.
+3. Interactive digest-bound approval, repository-bound staged records, journaled create/update/delete application, verification, automatic rollback, and explicit recovery/cleanup commands.
+4. Adversarial path/race, concurrency, rollback-idempotency, and process-crash/recovery tests.
+5. Documentation and repository CI validation.
 
-The draft stage-3 branch currently contains the apply/recover commands, but they are not on `main`. Do not merge or enable them until stage 3 review and stage 4 crash/adversarial validation are accepted. Import and preview remain read-only on `main`.
+The implementation was promoted to `main` by [PR #26](https://github.com/hapu/ai-workshop-template/pull/26). The promotion workflow [run #158](https://github.com/hapu/ai-workshop-template/actions/runs/45327477908) completed successfully. The merge commit records that crash-injection and adversarial tests passed on Python 3.10–3.13. The current CLI exposes separate `proposal apply` and `proposal recover` commands. Import and preview remain read-only; application remains POSIX-only and interactive.
+
+The test plan above remains the regression contract for future changes. Any change to filesystem primitives, journal transitions, rollback, or recovery must preserve these acceptance properties and pass the supported Python CI matrix before merge.

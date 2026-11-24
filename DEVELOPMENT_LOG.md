@@ -2,6 +2,13 @@
 
 Newest first, with ISO dates. Archive older entries after ~20 entries or 3,000 words.
 
+## 2026-11-24 (main proposal-application promotion and documentation reconciliation)
+- **Main promotion:** PR #26 merged the approved POSIX proposal-application implementation into `main` at `574ef89c70b9d8d4c307efac76af9a66aa9bf4eb`. The merged scope includes digest-bound interactive approval, repository-bound staged records, durable transaction journals/backups, no-overwrite create/update/delete operations, rollback, explicit recovery, and crash-injection/adversarial tests.
+- **Verification:** GitHub Actions CI run [45327477908](https://github.com/hapu/ai-workshop-template/actions/runs/45327477908) completed successfully on Python 3.10–3.13.
+- **Documentation issue found:** `HANDOFF.md`, `TODO.md`, `PROJECT_CONTEXT.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, and this design document still described proposal application as unmerged or future work after PR #26.
+- **This branch:** Reconcile those documents with the actual main implementation and make the SAT XML Manager pilot the next active task. No application code or provider policy is changed here.
+- **Pilot validation:** Not yet run. The user will test the repository and report workflow gaps before additional automation is designed.
+
 ## 2026-11-23 (session-ready repository cleanup)
 - **Change:** Audited main, PRs, required CI checks, branch protection, docs, and all remaining branches. Confirmed no open PRs and all four required checks pass on main. Rewrote the handoff, populated the master-template project context, reorganized TODO into one active task plus next/later/completed sections, and corrected the development history. This is documentation-only maintenance.
 - **Repository state:** Main before this cleanup was `b9bcd0622948ca5b7da5e17dfeed30930d24891a`. Twenty non-main branches remain; some are behind main and others diverged because squash merges do not preserve branch commit ancestry. No branch was deleted.
