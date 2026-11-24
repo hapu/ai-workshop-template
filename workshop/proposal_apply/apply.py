@@ -15,6 +15,7 @@ from .filesystem import (
     link_file_at,
     open_existing_parent,
     open_private_directory_at,
+    open_repository_root,
     read_private_file_at,
     read_regular_file_at,
     unlink_file_at,
@@ -143,6 +144,8 @@ def _mark_needs_recovery(transaction_fd: int, journal: dict[str, Any]) -> None:
 def rollback_transaction(
     transaction_fd: int,
     repository_root_fd: int,
+    *,
+    repository_root_path: str | os.PathLike[str] | None = None,
 ) -> dict[str, Any]:
     """Idempotently restore original target states; preserve unexpected objects."""
     journal = read_journal(transaction_fd)
@@ -156,6 +159,17 @@ def rollback_transaction(
     recorded = journal["repository_identity"]
     if identity.device != recorded["device"] or identity.inode != recorded["inode"]:
         raise ApplyError("Repository identity does not match the transaction journal")
+    if repository_root_path is not None:
+        supplied_path = os.path.abspath(os.fspath(repository_root_path))
+        if supplied_path != recorded["root"]:
+            raise ApplyError("Repository path does not match the transaction journal")
+        verified_fd = open_repository_root(supplied_path)
+        try:
+            verified_identity = directory_identity(verified_fd)
+        finally:
+            os.close(verified_fd)
+        if (verified_identity.device, verified_identity.inode) != (recorded["device"], recorded["inode"]):
+            raise ApplyError("Repository path was replaced since transaction preparation")
     if journal["state"] in {"PREPARING", "PREPARED"}:
         journal["state"] = "ROLLED_BACK"
         return write_journal(transaction_fd, journal)
@@ -360,6 +374,7 @@ def apply_prepared_transaction(
     *,
     proposal_id: str,
     proposal_sha256: str,
+    repository_root_path: str | os.PathLike[str],
     operations: Sequence[ProposalOperation],
 ) -> ApplyResult:
     """Apply a PREPARED transaction after interactive approval has succeeded.
@@ -391,6 +406,16 @@ def apply_prepared_transaction(
         identity = directory_identity(repository_root_fd)
         if identity.device != recorded["device"] or identity.inode != recorded["inode"]:
             raise ApplyError("Repository identity changed before application")
+        supplied_path = os.path.abspath(os.fspath(repository_root_path))
+        if supplied_path != recorded["root"]:
+            raise ApplyError("Repository path changed before application")
+        verified_fd = open_repository_root(supplied_path)
+        try:
+            verified_identity = directory_identity(verified_fd)
+        finally:
+            os.close(verified_fd)
+        if (verified_identity.device, verified_identity.inode) != (recorded["device"], recorded["inode"]):
+            raise ApplyError("Repository path was replaced before application")
 
         backups_fd = open_private_directory_at(transaction_fd, "backups")
         try:
@@ -504,7 +529,7 @@ def apply_prepared_transaction(
                             "Commit marker exists but final durability could not be confirmed; inspect recovery"
                         ) from exc
                     try:
-                        rollback_transaction(transaction_fd, repository_root_fd)
+                        rollback_transaction(transaction_fd, repository_root_fd, repository_root_path=repository_root_path)
                     except BaseException as rollback_exc:
                         _mark_needs_recovery(transaction_fd, current)
                         raise ApplyError(
