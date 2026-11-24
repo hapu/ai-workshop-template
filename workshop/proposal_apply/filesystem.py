@@ -1,7 +1,7 @@
-"""POSIX descriptor-relative filesystem primitives for proposal application.
+"""POSIX descriptor-relative inspection and private transaction-storage primitives.
 
-This module exposes inspection-only helpers at implementation stage 1. It does
-not create, replace, rename, or delete repository targets.
+Private transaction state may be created and durably updated. Repository target
+files remain read-only throughout these helpers and the preparation stage.
 """
 from __future__ import annotations
 
