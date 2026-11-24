@@ -1,47 +1,44 @@
-# Architecture
+# Architecture — SAT XML Manager
 
-Current executable architecture and extension points.
+This is an initial architecture map derived from a project handoff, not source inspection. Treat every reported component as provisional until verified against the actual repository.
 
-## Overview
+## Intended application shape
+- **UI:** Browser frontend using HTML, CSS, and JavaScript.
+- **Local service:** Python Flask application, reportedly served at `http://localhost:8765`.
+- **Persistence:** SQLite.
+- **Domain:** CFDI comprobantes identified by UUID, concepts, taxes, payment complements, managed RFC profiles, and discovered counterparties.
+- **Import/export:** XML and ZIP ingestion; CSV, JSON, and six-sheet Excel export are reported capabilities.
+- **SAT connector:** Optional e.firma authentication, mass-download request, request ID tracking, status polling, ZIP retrieval, and import.
 
-A dependency-free Python CLI manages local tasks, resumable checkpoints, bounded context bundles, and portable handoffs. Provider requests pass through a fail-closed policy gate and local quota ledger. The OpenRouter adapter exists, but the approved model catalog remains empty by default.
+## Expected source layout — unverified
+`app.py`, `cfdi.py`, `excel_export.py`, `reconciliation.py`, `requirements.txt`, `static/app.js`, `templates/index.html`, and `tests/`. Do not create or edit these files until the actual source tree is available.
 
-## Current components
+## Data invariants to verify
+- UUID uniqueness and deduplication.
+- Managed RFC profiles are distinct from counterparties extracted from CFDI.
+- Amounts remain separated by currency unless an explicit conversion policy exists.
+- Payment reconciliation accounts for partial payments and outstanding balances.
+- Credentials are not persisted unexpectedly and never appear in logs.
 
-- `workshop/cli.py` - task, context, and provider-policy commands.
-- `workshop/models.py`, `task_store.py` - task/checkpoint models and JSON persistence.
-- `workshop/context_manager.py` - allowlisted context, symlink containment, and word budgets.
-- `workshop/proposals.py` - bounded proposal validation, expected-hash checks, private staging, and read-only diffs.
-- `workshop/handoff.py` - Markdown handoffs with checkpoint state.
-- `workshop/providers/base.py` - provider-neutral message, response, and adapter protocol.
-- `policy.py` - strict catalog parsing and fail-closed free-tier preflight.
-- `reconciliation.py` - validation and normalization of provider quota snapshots.
-- `usage_ledger.py` - SQLite snapshots and atomic reservations across account, organization, project, and model scopes.
-- `runner.py` - supported adapter invocation path; authorizes and reserves before calling `complete`.
-- `openrouter.py` - standard-library Chat Completions adapter; no retries or provider/model fallback.
-- `config/provider-catalog.example.json` - empty catalog example; no model is pre-approved.
-- `.workshop/` - private local state, ignored by Git.
+## SAT request flow
+Load credentials for an RFC → authenticate → submit a date-filtered mass-download request → receive request ID → poll status → retrieve ZIP package(s) → import and deduplicate XML.
 
-## Task persistence
+For the reported `FechaFinal` failure, inspect the browser date value and JSON payload, Flask route, installed SAT client version, and sanitized serialized SOAP request. The possibility that a date-only string is being sent where DateTime is expected is a hypothesis, not a confirmed root cause.
 
-Task files use unique same-directory temporary files, fsync, and atomic replacement. Per-task locks serialize cross-process updates. Recovery removes old orphaned temporary files but never promotes incomplete writes. Versioned bundles enforce a 1 MiB cap, schema validation, SHA-256 integrity checks, and no-overwrite imports.
+## Error boundaries
+- Local input validation: actionable 400 response.
+- SAT business rejection: preserve SAT status/message as a structured application response; do not automatically classify every rejection as 502.
+- Network timeout: safe 502/504 diagnostic.
+- Unexpected internal failure: 500 with details only in local logs.
+- Browser 404: diagnose independently using exact URL, method, initiator, and expected resource.
 
-## Provider policy
+## Unknowns / source evidence required
+- Actual repository URL, branch, commit, tree, and project instructions.
+- Current routes, frontend payload schema, database schema, and dependency versions.
+- Whether the reported features exist and are covered by tests.
+- Whether 502 originates in Flask or another local layer.
+- Exact cause of the 404 and FechaFinal rejection.
+- Credential lifecycle, backup/restore behavior, and end-to-end SAT connector reliability.
 
-A model must be enabled, verified, in-date, region-eligible, linked to official HTTPS pricing/terms, priced at exactly zero, and within token limits. Unknown policies are denied. The local catalog is gitignored. Every adapter must use the shared gate; OpenRouter pins the exact catalog model and disables provider fallbacks.
-
-## Context policy
-
-Only `AGENTS.md`, `PROJECT_CONTEXT.md`, `HANDOFF.md`, `TODO.md`, `docs/ARCHITECTURE.md`, and `docs/WORKFLOW.md` are included. Per-file and aggregate word budgets apply; symlinks resolving outside the project root are rejected.
-
-## Quota boundaries and constraints
-
-Quotas may be scoped to account, organization, project, or exact model. Organization/project scopes require non-secret aliases and matching snapshot IDs. SQLite v2 migrates legacy records and aggregates reservations across shared scopes. Missing, stale, expired, or mismatched snapshots block requests. External usage from other devices or browser tools is not automatically visible.
-
-The runtime targets Python 3.10+ and the standard library. No paid usage is allowed without explicit approval. Automatic cross-device reconciliation is not implemented. OpenRouter inference remains unavailable until a verified local policy and fresh quota snapshots exist. Keep the runtime suitable for a low-memory Chromebook; avoid Docker, local LLMs, and heavy databases.
-
-## Browser-assistant proposal boundary
-
-The importer accepts a versioned, size-bounded JSON bundle, not executable assistant output. Each operation names a repository-relative path and expected SHA-256 of the current file, or explicitly declares a new file. Validation rejects absolute paths, traversal, symlinks, protected state, credential-like paths, unsupported operations, duplicate paths, oversized content, and stale hashes. Proposals are staged under ignored `.workshop/proposals/`; staged records carry an integrity checksum and are revalidated against current repository preconditions before a read-only diff is shown. Optional task IDs and context-bundle SHA-256 values preserve provenance without copying context contents. Checksums detect accidental corruption, not author identity.
-
-Imported bundles are untrusted data. The current workflow does not execute shell commands, install dependencies, call providers, or apply files. Any future apply action must be separate, explicitly approved, and recheck hashes immediately before writing. Commits, pushes, pull requests, and merges remain separate approval-gated actions.
+## Target constraints
+Keep the implementation suitable for a Celeron N4500 Chromebook with 4 GB RAM and roughly 15 GB Linux storage. Prefer lightweight local tools and cloud inference; do not require Docker or a local LLM.
