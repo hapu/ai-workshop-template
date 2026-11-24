@@ -208,10 +208,37 @@ def inventory_transaction(
                 and path_identity.inode == recorded["inode"]
             )
             if identity_matches:
-                target_states = [
-                    _target_inventory(repository_root_fd, operation)
-                    for operation in journal["operations"]
-                ]
+                target_states = []
+                for operation in journal["operations"]:
+                    observed = _target_inventory(repository_root_fd, operation)
+                    if observed["state"] == "absent":
+                        observed["matches_original_state"] = operation["op"] == "create"
+                        observed["matches_proposed_state"] = operation["op"] == "delete"
+                        observed["matches_original_identity"] = operation["op"] == "create"
+                    elif observed["state"] == "regular_file":
+                        observed["matches_original_content"] = (
+                            operation["original_sha256"] is not None
+                            and observed["sha256"] == operation["original_sha256"]
+                        )
+                        observed["matches_proposed_content"] = (
+                            operation["proposed_sha256"] is not None
+                            and observed["sha256"] == operation["proposed_sha256"]
+                        )
+                        observed["matches_original_identity"] = (
+                            operation["original_device"] is not None
+                            and observed["device"] == operation["original_device"]
+                            and observed["inode"] == operation["original_inode"]
+                        )
+                        observed["matches_original_state"] = (
+                            observed["matches_original_content"]
+                            and observed["matches_original_identity"]
+                        )
+                        observed["matches_proposed_state"] = observed["matches_proposed_content"]
+                    observed["matches_known_transaction_state"] = (
+                        observed.get("matches_original_state", False)
+                        or observed.get("matches_proposed_state", False)
+                    )
+                    target_states.append(observed)
 
         return {
             "transaction_id": transaction_id,
