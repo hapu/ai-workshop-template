@@ -151,7 +151,8 @@ def _target_and_sibling_inventory(
     try:
         target = _target_inventory(repository_root_fd, operation)
         temporary_digest = (
-            operation["proposed_sha256"] if operation["proposed_sha256"] is not None
+            operation["original_sha256"] if operation.get("status") == "RESTORED"
+            else operation["proposed_sha256"] if operation["proposed_sha256"] is not None
             else operation["original_sha256"]
         )
         temporary = _sibling_inventory(
@@ -171,8 +172,13 @@ def _target_and_sibling_inventory(
         if target["state"] == "absent":
             target["matches_original_state"] = operation["op"] == "create"
             target["matches_proposed_state"] = operation["op"] == "delete"
-            if operation["op"] == "update" and quarantine is not None:
-                target["matches_intermediate_state"] = quarantine.get("matches_expected", False)
+            if operation["op"] == "update":
+                target["matches_intermediate_state"] = (
+                    quarantine is not None and quarantine.get("matches_expected", False)
+                ) or (
+                    temporary is not None and temporary.get("matches_expected", False)
+                    and operation.get("status") == "RESTORED"
+                )
         elif target["state"] == "regular_file":
             target["matches_original_content"] = (
                 operation["original_sha256"] is not None
@@ -196,10 +202,12 @@ def _target_and_sibling_inventory(
                 and target["device"] == operation["applied_device"]
                 and target["inode"] == operation["applied_inode"]
             )
-            if (journal_state == "ROLLED_BACK" and target["matches_original_content"]
-                    and operation.get("status") == "DONE"
-                    and operation.get("applied_device") == target["device"]
-                    and operation.get("applied_inode") == target["inode"]):
+            if (target["matches_original_content"] and operation.get("status") == "RESTORED"
+                    and ((operation.get("applied_device") == target["device"]
+                          and operation.get("applied_inode") == target["inode"])
+                         or (temporary is not None and temporary.get("matches_expected")
+                             and temporary.get("device") == target["device"]
+                             and temporary.get("inode") == target["inode"]))):
                 target["matches_restored_state"] = True
 
         target["matches_known_transaction_state"] = any((
