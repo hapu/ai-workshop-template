@@ -97,6 +97,8 @@ def apply_proposal(
                         raise ProposalApplyServiceError(f"{label} changed while acquiring the transaction lock")
 
                 verify_approval_digest(record["record_sha256"], supplied_record_sha256)
+                if not input_stream.isatty() or not output_stream.isatty():
+                    raise ApprovalError("Proposal application requires an interactive terminal; no files were changed")
                 _ensure_no_unresolved_transaction(proposal_dir_fd, proposal_id)
                 identity = repository_identity(store.repository, repository_root_fd)
                 snapshots = []
