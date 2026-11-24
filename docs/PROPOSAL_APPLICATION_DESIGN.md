@@ -1,6 +1,6 @@
 # Proposal Application Safety Design
 
-**Status:** Approved; stages 1 and 2 merged, stage 3 in progress  
+**Status:** Approved; stages 1 and 2 merged into the design branch; stage 3 implemented in draft PR #25; stage 4 crash/adversarial validation pending  
 **Decision date:** 2026-11-23  
 **Scope:** Local application of staged browser-assistant file proposals  
 **Selected platform:** POSIX  
@@ -19,7 +19,7 @@ The existing proposal workflow remains unchanged:
 - Preview rechecks current preconditions and displays a read-only diff.
 - Neither import nor preview writes to repository targets or executes proposal content.
 
-A future apply command must be separate from import and preview. This subsystem must not execute shell commands, invoke providers, install packages, or perform Git commits, pushes, pull requests, or merges. Those actions remain separate workflows and approvals.
+The apply command is separate from import and preview. This subsystem must not execute shell commands, invoke providers, install packages, or perform Git commits, pushes, pull requests, or merges. Those actions remain separate workflows and approvals.
 
 This design provides recoverable multi-file application, not instantaneous multi-file atomic visibility to arbitrary external readers.
 
@@ -79,10 +79,9 @@ The apply command must:
 3. Re-read the staged record using safe private-state path handling; validate its schema, proposal ID, record checksum, and canonical digest.
 4. Require the supplied full digest to match the recomputed digest using a constant-time comparison.
 5. Revalidate the repository identity, every operation path, and every target precondition.
-6. Display the exact operation list and digest, then require the user to type the exact line:
-   `APPLY PROPOSAL_ID FULL_64_CHARACTER_DIGEST`.
-7. Revalidate target preconditions once more immediately before the first repository modification.
-8. Persist a durable transaction journal before the first target modification.
+6. Display operation list, digest, and diffs recomputed from the live snapshot (never trust stored preview text), then require the exact line `APPLY PROPOSAL_ID FULL_64_CHARACTER_DIGEST`.
+7. Re-read the staged record and revalidate target snapshots after confirmation.
+8. Persist a durable transaction journal before the first repository modification.
 
 No approval is inferred from import, preview, a previous command, or a previous proposal. No abbreviated digest, default confirmation, wildcard, or remembered approval is accepted. Any change to the staged record invalidates the supplied digest. A successful committed transaction cannot be applied again; restaging is required for a new proposal. A rolled-back proposal requires a fresh interactive approval for any retry.
 
@@ -96,7 +95,7 @@ At staging time, record a repository identity containing at least:
 - canonical absolute repository-root path;
 - root directory device and inode values (`st_dev`, `st_ino`).
 
-The current staged-record schema does not yet contain this identity. Add it to a new staged-record format version and include it in the record digest. Keep the incoming proposal-bundle version independent from the staged-record version. Existing staged records without repository identity are not eligible for application; users must restage them after the feature is introduced.
+Staged-record version 2 contains this identity and includes it in the record digest. The incoming proposal-bundle version remains independent from the staged-record version. Existing staged records without repository identity remain previewable but are not eligible for application; users must restage them.
 
 At apply and recovery time, open the root directory and compare its identity with the recorded values. Reject a moved, replaced, or different root. This is a local filesystem identity check, not a cryptographic repository identity.
 
@@ -202,10 +201,10 @@ No repository target may change before the durable `APPLYING` state exists.
 Apply operations in proposal order. For each operation, record intent and completion in the journal and flush journal updates around the filesystem transition.
 
 - **Create:** install a fully prepared sibling file with an atomic no-overwrite operation. A POSIX hard-link operation from a prepared sibling to the destination can provide create-if-absent semantics; unlink the temporary name after verifying the installed file. Do not use a check-then-open sequence that can overwrite a file created concurrently.
-- **Update:** move the current target to a uniquely named same-directory quarantine entry using descriptor-relative rename; verify the moved object still has the previously checked identity and expected digest. Install the prepared content at the target with create-if-absent semantics. If installation fails, restore the quarantined original only if the target name remains absent.
-- **Delete:** move the target to a uniquely named same-directory quarantine entry; verify the moved object identity and expected digest. Keep the quarantine entry until commit is durable.
+- **Update:** create a same-directory hard link from the current regular target to a uniquely named quarantine entry using descriptor-relative, no-follow link semantics. Verify the linked object identity, digest, and expected link count; unlink the original target name only after verification. Install prepared content at the target with no-overwrite hard-link semantics. If installation fails, restore the quarantined original only if the target name remains absent.
+- **Delete:** create and verify the same-directory quarantine hard link, then unlink the original target name only after identity, digest, and link-count checks. Keep the quarantine entry until commit is durable.
 
-Same-directory quarantine avoids cross-filesystem rename and gives the transaction an object it can inspect after the name transition. The durable private backup remains the recovery source. Temporary/quarantine names must be unpredictable, collision-checked, recorded in the journal, and created only within the verified parent directory.
+Same-directory hard-link quarantine avoids cross-filesystem rename and gives the transaction an object it can inspect before removing the original name. The durable private backup remains the recovery source. Temporary/quarantine names are derived from the random transaction ID and operation index, collision-checked, recorded in the journal, and created only within the verified parent directory. Filesystems that do not support the required no-follow hard-link operation fail closed.
 
 After each operation:
 - verify the target's resulting state using a no-follow descriptor and expected digest (or absence for delete);
@@ -346,10 +345,10 @@ The test suite must run on each supported Python version in CI. The implementati
 
 Implementation may begin only after this document has been reviewed and approved. Work should then proceed in separate reviewable stages:
 
-1. POSIX filesystem primitives and lock tests; no proposal application.
-2. Journal format, backup preparation, and recovery inventory; no target writes.
-3. Approval-gated transaction application and rollback.
-4. Adversarial race, concurrency, and crash-injection tests.
+1. POSIX filesystem primitives and lock tests; no proposal application. (Merged to the design branch by PR #23.)
+2. Journal format, backup preparation, and recovery inventory; no target writes. (Merged to the design branch by PR #24.)
+3. Approval-gated transaction application, verification, rollback, and explicit recovery commands. (Draft PR #25; review pending.)
+4. Adversarial race, concurrency, and crash-injection tests. (Not yet complete.)
 5. Documentation updates and full repository checks.
 
-Until stage 3 is separately reviewed and accepted, do not add an apply or recover command, do not write proposal contents into repository targets, and do not change the read-only behavior of import or preview.
+The draft stage-3 branch currently contains the apply/recover commands, but they are not on `main`. Do not merge or enable them until stage 3 review and stage 4 crash/adversarial validation are accepted. Import and preview remain read-only on `main`.
