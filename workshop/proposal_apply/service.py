@@ -181,6 +181,7 @@ def apply_proposal(
                     proposal_sha256=record["record_sha256"],
                     repository_root_path=store.repository,
                     operations=operations,
+                    snapshots=snapshots,
                 )
                 output_stream.write(f"\nTransaction: {result.transaction_id}\n")
                 output_stream.write(f"Status: {result.state}\n")
