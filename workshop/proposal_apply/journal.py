@@ -150,7 +150,7 @@ def validate_journal(value: object) -> dict[str, Any]:
                     or not _is_sha(proposed)):
                 raise JournalError("Update operation digest preconditions are invalid")
             if (type(operation.get("original_mode")) is not int
-                    or not 0 <= operation["original_mode"] <= 0o7777
+                    or not 0 <= operation["original_mode"] <= 0o777
                     or not _is_optional_nonnegative_int(operation.get("original_device"))
                     or operation.get("original_device") is None
                     or not _is_optional_nonnegative_int(operation.get("original_inode"))
