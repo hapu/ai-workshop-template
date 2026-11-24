@@ -6,11 +6,12 @@ not create, replace, rename, or delete repository targets.
 from __future__ import annotations
 
 import os
+import secrets
 import stat
 from dataclasses import dataclass
 from typing import Iterable
 
-_REQUIRED_DIR_FD_FUNCTIONS = (os.open, os.stat, os.unlink, os.rename, os.link)
+_REQUIRED_DIR_FD_FUNCTIONS = (os.open, os.stat, os.unlink, os.rename, os.link, os.mkdir)
 
 
 class FilesystemSafetyError(RuntimeError):
@@ -161,4 +162,149 @@ def open_regular_file_at(parent_fd: int, name: str) -> int:
         return descriptor
     except BaseException:
         os.close(descriptor)
+        raise
+
+
+def _verify_private_directory(descriptor: int) -> None:
+    info = os.fstat(descriptor)
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+        raise FilesystemSafetyError("Private state directory must be owned by the current user")
+    mode = stat.S_IMODE(info.st_mode)
+    if mode & 0o077 or mode & 0o700 != 0o700:
+        raise FilesystemSafetyError("Private state directory must have owner-only 0700 permissions")
+
+
+def open_private_directory_at(parent_fd: int, name: str, *, create: bool = False) -> int:
+    """Open or create an owner-only private child directory."""
+    name = _component(name)
+    if create:
+        try:
+            os.mkdir(name, 0o700, dir_fd=parent_fd)
+            os.fsync(parent_fd)
+        except FileExistsError:
+            pass
+        except OSError as exc:
+            raise FilesystemSafetyError(f"Cannot create private directory: {name}") from exc
+    descriptor = open_directory_at(parent_fd, name)
+    try:
+        _verify_private_directory(descriptor)
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def fsync_directory(directory_fd: int) -> None:
+    """Flush directory metadata or fail explicitly when the filesystem cannot."""
+    try:
+        os.fsync(directory_fd)
+    except OSError as exc:
+        raise FilesystemSafetyError(
+            "Directory fsync is unavailable; durable transaction preparation is unsupported"
+        ) from exc
+
+
+def _write_all(descriptor: int, content: bytes) -> None:
+    view = memoryview(content)
+    while view:
+        written = os.write(descriptor, view)
+        if written <= 0:
+            raise OSError("Short write while preparing private transaction data")
+        view = view[written:]
+
+
+def create_private_file_at(directory_fd: int, name: str, content: bytes) -> None:
+    """Create a new owner-only private file, flush its bytes and directory entry."""
+    name = _component(name)
+    if not isinstance(content, bytes):
+        raise TypeError("Private transaction file content must be bytes")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
+    descriptor = os.open(name, flags, 0o600, dir_fd=directory_fd)
+    try:
+        info = os.fstat(descriptor)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) & 0o077):
+            raise FilesystemSafetyError("New private file failed ownership or mode checks")
+        _write_all(descriptor, content)
+        os.fsync(descriptor)
+    except BaseException:
+        try:
+            os.unlink(name, dir_fd=directory_fd)
+            fsync_directory(directory_fd)
+        except OSError:
+            pass
+        raise
+    finally:
+        os.close(descriptor)
+    fsync_directory(directory_fd)
+
+
+def read_private_file_at(directory_fd: int, name: str, *, max_bytes: int = 1024 * 1024) -> bytes:
+    """Read a bounded owner-only regular file without following links."""
+    name = _component(name)
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
+    try:
+        descriptor = os.open(name, flags, dir_fd=directory_fd)
+    except OSError as exc:
+        raise FilesystemSafetyError(f"Cannot safely open private file: {name}") from exc
+    try:
+        info = os.fstat(descriptor)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) & 0o077):
+            raise FilesystemSafetyError(f"Private file ownership or mode is unsafe: {name}")
+        if info.st_size > max_bytes:
+            raise FilesystemSafetyError(f"Private file exceeds the size limit: {name}")
+        chunks: list[bytes] = []
+        remaining = max_bytes + 1
+        while remaining:
+            chunk = os.read(descriptor, min(65536, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        content = b"".join(chunks)
+        if len(content) > max_bytes:
+            raise FilesystemSafetyError(f"Private file exceeds the size limit: {name}")
+        return content
+    finally:
+        os.close(descriptor)
+
+
+def replace_private_file_at(directory_fd: int, name: str, content: bytes) -> None:
+    """Atomically replace one private file using a flushed same-directory temp."""
+    name = _component(name)
+    try:
+        existing = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        existing = None
+    if existing is not None:
+        if (not stat.S_ISREG(existing.st_mode) or existing.st_uid != os.getuid()
+                or existing.st_nlink != 1 or stat.S_IMODE(existing.st_mode) & 0o077):
+            raise FilesystemSafetyError(f"Refusing to replace unsafe private file: {name}")
+
+    temporary = ".txn-" + secrets.token_hex(16) + ".tmp"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
+    descriptor = os.open(temporary, flags, 0o600, dir_fd=directory_fd)
+    try:
+        _write_all(descriptor, content)
+        os.fsync(descriptor)
+    except BaseException:
+        os.close(descriptor)
+        try:
+            os.unlink(temporary, dir_fd=directory_fd)
+            fsync_directory(directory_fd)
+        except OSError:
+            pass
+        raise
+    else:
+        os.close(descriptor)
+    try:
+        os.replace(temporary, name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+        fsync_directory(directory_fd)
+    except BaseException:
+        try:
+            os.unlink(temporary, dir_fd=directory_fd)
+            fsync_directory(directory_fd)
+        except OSError:
+            pass
         raise
